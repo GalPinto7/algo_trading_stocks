@@ -1,0 +1,41 @@
+ticker,company_name,group,include_flag,notes
+AAPL,Apple Inc.,hardware,1,consumer devices and platform
+MSFT,Microsoft Corporation,software,1,enterprise software and cloud
+NVDA,NVIDIA Corporation,semiconductors,1,AI and GPU leader
+AVGO,Broadcom Inc.,semiconductors,1,chips and infrastructure software
+ORCL,Oracle Corporation,software,1,database and cloud
+CRM,"Salesforce, Inc.",software,1,enterprise SaaS
+ADBE,Adobe Inc.,software,1,creative and document software
+CSCO,"Cisco Systems, Inc.",hardware,1,networking equipment
+AMD,"Advanced Micro Devices, Inc.",semiconductors,1,CPU and GPU designer
+QCOM,QUALCOMM Incorporated,semiconductors,1,mobile and wireless chips
+INTC,Intel Corporation,semiconductors,1,chip designer and manufacturer
+TXN,Texas Instruments Incorporated,semiconductors,1,analog semiconductors
+MU,"Micron Technology, Inc.",semiconductors,1,memory and storage
+AMAT,"Applied Materials, Inc.",semiconductors,1,chip equipment
+KLAC,KLA Corporation,semiconductors,1,process control equipment
+LRCX,Lam Research Corporation,semiconductors,1,wafer fabrication equipment
+SNPS,"Synopsys, Inc.",software,1,EDA software
+CDNS,"Cadence Design Systems, Inc.",software,1,EDA software
+PANW,"Palo Alto Networks, Inc.",software,1,cybersecurity
+CRWD,"CrowdStrike Holdings, Inc.",software,1,cybersecurity
+FTNT,"Fortinet, Inc.",software,1,cybersecurity
+NOW,"ServiceNow, Inc.",software,1,workflow software
+INTU,Intuit Inc.,software,1,financial software
+ADP,"Automatic Data Processing, Inc.",IT_services,1,HR and payroll tech
+IBM,International Business Machines Corporation,IT_services,1,enterprise IT and consulting
+ACN,Accenture plc,IT_services,1,IT consulting and services
+ANET,"Arista Networks, Inc.",hardware,1,cloud networking
+DELL,Dell Technologies Inc.,hardware,1,servers and infrastructure
+HPQ,HP Inc.,hardware,1,PCs and printers
+HPE,Hewlett Packard Enterprise Company,hardware,1,enterprise infrastructure
+APH,Amphenol Corporation,hardware,1,connectivity and electronic components
+ROP,"Roper Technologies, Inc.",software,1,vertical software and tech
+PLTR,Palantir Technologies Inc.,software,1,data analytics software
+TTD,"The Trade Desk, Inc.",software,1,adtech platform
+SHOP,Shopify Inc.,software,1,commerce software
+NET,"Cloudflare, Inc.",software,1,network and security platform
+DDOG,"Datadog, Inc.",software,1,observability platform
+ZM,"Zoom Communications, Inc.",software,1,communications software
+UBER,"Uber Technologies, Inc.",software,1,platform and logistics tech
+DOCU,"DocuSign, Inc.",software,1,e-signature software
