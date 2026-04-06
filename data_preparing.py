@@ -14,13 +14,13 @@ import pickle
 import math
 from sklearn.preprocessing import MinMaxScaler
 from datetime import datetime, timedelta, date
+from evaluation_and_simulation import where_the_code_runs
 
 """
 amount of data:
 recommended at least 5 years worth of that for daily data.
 maybe work on with the stocks that have this much info.
 """
-
 
 
 """
@@ -34,7 +34,6 @@ score <= 51% -> bad
 # todo: for now there are 1370 row per stock, there are 252ish trading days in a year
 #  , we have 1370/252 = 5.4 years worth of data -> enough for XGBoost / linear regression,
 #  NOT  enough for NN / LSTMs / Transformers.
-
 # todo: see if you worked on a balanced time frame (#up ~ # down)?
 # todo: save all in as parquet.
 # todo: connect the whole project to gitHub.
@@ -58,10 +57,18 @@ predict -> next-day percent return for each stock
 # todo: we declarer of the var type in the signature of the functions -> easy to read.
 # todo: check if I should run on cloud because I have no GPU
 
+
+
+
+if(where_the_code_runs != 1 and where_the_code_runs != 2):
+    raise ValueError('Can select only between 1 or 2.')
+
 ############### uploading the data from the csv to pandas df ############################################
 # this is a file with 40 tech companies - small sample for now
 # columns -> ticker = stock symbol, company_name = full company name, group = rough tech subgroup, include_flag = 1 means include in the universe, notes = short reminder about the company
 tech_40_path = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\tech_universe.csv"
+if (where_the_code_runs == 2):
+    tech_40_path = r"/content/algo_trading_stocks/data/tech_universe.csv"
 df_top_40_tech_companies = pd.read_csv(tech_40_path)
 
 # list of the names of all the companies in the df_top_40_tech_companies
@@ -188,6 +195,8 @@ def companies_list_earliest_timestamp_dict_fetcher(symbols_list: list[str], inte
 
 # the path of the Earliest_Timestamps for the top 40 teach companies
 pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\Earliest_Timestamps_daily_top_40_teach_companies_data.pkl"
+if (where_the_code_runs == 2):
+    pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies = r"pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies"
 
 """
 creating a dict of the Earliest_Timestamps_daily of the 40_tech_companies and pickle it.
@@ -202,6 +211,9 @@ Earliest_Timestamps_top_40_tech_companies_daily = unpickle_data(pickle_file_path
 Doing the same a dict of the Earliest_Timestamps_hourly of the 40_tech_companies and pickle it.
 """
 pickle_file_path_Earliest_Timestamps_hourly_top_40_teach_companies = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\Earliest_Timestamps_hourly_top_40_teach_companies_data.pkl"
+if(where_the_code_runs == 2):
+    pickle_file_path_Earliest_Timestamps_hourly_top_40_teach_companies = r"/content/algo_trading_stocks/data/Earliest_Timestamps_hourly_top_40_teach_companies_data.pkl"
+
 
 """
 # NOTICE: the code works but we will get diffrent time frames when switching the interval ->
@@ -369,6 +381,8 @@ def all_df_creator(ticker_list: list[str], wanted_interval: str, how_many_interv
 # getting the stocks data
 
 pickle_file_path = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_days_data.pkl"
+if(where_the_code_runs == 2):
+    pickle_file_path = r"/content/algo_trading_stocks/data/five_thousand_days_data.pkl"
 # five_thousand_days_data_pickle = pickling_func(five_thousand_days_data, pickle_file_path) # called it once, now it is saved
 five_thousand_days_data_df = unpickle_data(pickle_file_path)
 
@@ -699,6 +713,10 @@ def relative_field_x_days(df: pd.DataFrame, num_of_days: int,new_col_name: str, 
 experiment_pickle_file_path = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_days_data_experiment.pkl"
 experiment_train_and_validation_pickle_file_path = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\experiment_train_and_validation_data.pkl"
 experiment_test_pickle_file_path = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\experiment_test_data.pkl"
+if(where_the_code_runs == 2):
+    experiment_pickle_file_path = r"/content/algo_trading_stocks/data/five_thousand_days_data_experiment.pkl"
+    experiment_train_and_validation_pickle_file_path = r"/content/algo_trading_stocks/data/experiment_train_and_validation_data.pkl"
+experiment_test_pickle_file_path = r"/content/algo_trading_stocks/data/experiment_test_data.pkl"
 
 # one hot encoding but keeping the 'symbol' col
 # symbol_dummies = pd.get_dummies(five_thousand_days_data_df['symbol'], prefix='symbol')

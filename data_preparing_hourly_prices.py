@@ -18,6 +18,8 @@ from data_preparing import (pickling_func,unpickle_data, company_exchange_and_cu
                             company_earliest_timestamp_fetcher, same_start_date_for_all_stocks,
                             Earliest_Timestamps_top_40_tech_companies_daily)
 
+from evaluation_and_simulation import where_the_code_runs
+
 """
 We will create a df with hourly prices for the 40 stocks here.
 Later we will add these columns to the daily prices df to create one
@@ -47,6 +49,11 @@ pickle_hourly_temp_file_final= r"C:\Users\galpi\Desktop\stocks algo trading - 14
 pickle_hourly_file_path = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_hourly_data.pkl"
 # this is for temp files
 pickle_hourly_temp_file_path = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_hourly_temp_data.pkl"
+
+# run on google colab
+if(where_the_code_runs == 2):
+    pickle_hourly_temp_file_path = r"/content/algo_trading_stocks/data/five_thousand_hourly_temp_data.pkl"
+    pickle_hourly_file_path = r"five_thousand_hourly_data.pkl"
 
 """
 the daily df has col->'date'->2020-09-30

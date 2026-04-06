@@ -23,7 +23,11 @@ from models.model_base import Model
 from models.ml_models import XGBoostModel, LinearRegressionModel
 from models.neural_network_models import FullyConnectedNeuralNetwork
 
-
+"""
+Because we edit on locally but run the code on Google colab, because of the lack on local GPU
+we have modify the paths of the files based on where we work.
+"""
+where_the_code_runs = int(input('please enter where the code runs. \nenter 1 for locally, 2 for Google colab: '))
 
 
 # todo: scale the data -> do it per iteration, if you do it on all the data
