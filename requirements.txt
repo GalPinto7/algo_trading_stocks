@@ -1,0 +1,9 @@
+wakatime
+pandas
+matplotlib
+numpy
+scikit-learn
+requests
+twelvedata
+xgboost
+tensorflow
