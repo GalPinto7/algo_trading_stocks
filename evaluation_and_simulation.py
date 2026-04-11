@@ -8,10 +8,7 @@ from numpy import floating
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import MinMaxScaler
 import matplotlib.pyplot as plt
-import pandas as pd
-from data_preparing import (pickle_file_path,unpickle_data, experiment_pickle_file_path, min_date_all_symbols_have,
-                            max_date, relative_field_x_days, experiment_train_and_validation_pickle_file_path, 
-                            experiment_test_pickle_file_path, data_split_to_train_and_validation)
+
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, root_mean_squared_error
@@ -22,76 +19,66 @@ from models.base_line_models import DumbModel, PreviousDayReturnModel,RollingAvg
 from models.model_base import Model
 from models.ml_models import XGBoostModel, LinearRegressionModel
 from models.neural_network_models import FullyConnectedNeuralNetwork
+import pandas as pd
+from data_preparing import (pickle_file_path,unpickle_data, experiment_pickle_file_path, min_date_all_symbols_have,
+                            max_date, relative_field_x_days, experiment_train_and_validation_pickle_file_path, 
+                            experiment_test_pickle_file_path, data_split_to_train_and_validation)
+from runtime_config import where_the_code_runs
+
 
 """
-Because we edit on locally but run the code on Google colab, because of the lack on local GPU
-we have modify the paths of the files based on where we work.
+We write the code with 'if __name__ == "__main__":', so all the class + def we'll keep
+outside the 'if __name__ == "__main__":' block, but the things we want to run each time we do the simulation,
+we will write inside the block.
+All the executable code -> inside the block.
+All the rest -> not inside the block.
 """
-where_the_code_runs = int(input('please enter where the code runs. \nenter 1 for locally, 2 for Google colab: '))
 
-
+# multy threads?
+# todo: if you are sure the changes you do are correct -> push to git -> update files in google colab.
+# todo: if you add a library -> add it to the requirements.txt file.
 # todo: scale the data -> do it per iteration, if you do it on all the data
 #  that will be leakage, because than the price t can now the max price ever, that
-#  may still not happened, so he knows it will happen in the future -> data leakage
+#  may still not happened, so he knows it will happen in the future -> data leakage.
 
-# todo: another thing the chat said to fix
+# todo: another thing the chat said to fix.
 
+# todo: something looks off -> 1. linear regression bought and sold but no there was no different in the money.
+# todo: the XGBoost used to make money, now losses?
 """
 We may add more fields to the table.
 We use regression because we predict the price -> continuous.
 We here compare the different models.
 We moved to object oriented programming.
 """
-# todo: add checks to the code -> a lot
+# todo: add checks to the code -> a lot.
 # todo: read the last conv with chat and add the features.
 # todo: for now close is fine, in the future must change, maybe to 'open' -> can't but when close.
 # todo: maybe add exception handling in functions
 # XGBoost knows how to handle booleans
 
-data_experiment_train_and_validation_df = unpickle_data(experiment_train_and_validation_pickle_file_path)
 
-# todo: chat says this is to expensive and there is another way to do so
-data_experiment_train_and_validation_df = data_experiment_train_and_validation_df.loc[:, ~data_experiment_train_and_validation_df.columns.duplicated()].copy()
-
-
-# a list of the relevant_models_numbers_for_x_scaling -> update each time we add a new relevant model.
+# todo: you can move this to an enum class
+# todo: update this each time you add a new model
+# a dict of the relevant_models_numbers_for_x_scaling -> update each time we add a new relevant model.
 # flag == 0 -> dumb model: no scaling ,
-# flag == 1 ->XGBoost model: no scaling
+# flag == 1 -> XGBoost model: no scaling
 # flag == 2 -> previous daily return pred: no scaling,
 # flag == 3 -> rolling AVG pred: no scaling
 # flag == 4 -> Linear regression: scaling
 # flag == 5 -> FullyConnectedNeuralNetwork: scaling
-relevant_models_numbers_for_x_scaling = [4,5]
+relevant_models_and_numbers_dict = {0: 'dumb_model', 1: 'XGBoost_model', 2:'previous_daily_return',
+                                         3: 'rolling_AVG_pred', 4:'Linear_regression', 5: 'FullyConnectedNeuralNetwork'}
 
-
-# a part to check there is no data leakage
-df_check = data_experiment_train_and_validation_df.copy()
-df_check["date"] = pd.to_datetime(df_check["date"])
-df_check = df_check.sort_values(["symbol", "date"]).reset_index(drop=True)
-
-# same-day return: (close_t - close_t-1) / close_t-1
-df_check["same_day_return_check"] = (
-    df_check.groupby("symbol")["close"].pct_change(1)
-)
-
-# next-day return on row t: (close_t+1 - close_t) / close_t
-df_check["next_day_return_check"] = (
-    df_check.groupby("symbol")["close"].shift(-1) / df_check["close"] - 1
-)
-
-print("Matches same-day target:",
-      np.isclose(
-          df_check["daily_return_percentage"],
-          df_check["same_day_return_check"],
-          equal_nan=True
-      ).mean())
-
-print("Matches next-day target:",
-      np.isclose(
-          df_check["next_day_return"],
-          df_check["next_day_return_check"],
-          equal_nan=True
-      ).mean())
+relevant_models_and_numbers_dict_for_scaling = {4:'Linear_regression', 5: 'FullyConnectedNeuralNetwork'}
+# validation_type: Type of test we want to do
+# validation_type is None -> AVG RMSE
+# validation_type = 2 -> right direction: y_prd * t_validation > 0 <-> 1 O.W 0
+# NOT EQUAL TO 0 BECAUSE FOR THE DUMB MODEL y_prd = 0 SO y_prd * t_validation = 0 ALWAYS
+# validation_type = 3 -> make guess only if |y_pred| > initial_threshold
+# a dict of all the relevant test types and their numbers.
+validation_types_dict = {1: 'RMSE', 2: "right_direction",
+                         3: "right_direction_over_threshold"}
 
 
 
@@ -761,7 +748,7 @@ def validation_result_based_on_test_type(
     """
     This returns the values_list with the appended new value for the given set and test type.
     :param validation_type: The type of test.
-            validation_type is None -> RMSE, validation_type == 2 -> right direction,
+            validation_type is None or 1 -> RMSE, validation_type == 2 -> right direction,
             validation_type == 3 -> right direction over threshold
     :param values_list: A list of the values of the validation.
     :param y_validation: the Y_test values.
@@ -771,7 +758,7 @@ def validation_result_based_on_test_type(
     :return: The values_list after adding the new value of the last validation.
     """
     # RMSE
-    if (validation_type is None):
+    if ((validation_type is None) or (validation_type == 1) ):
         values_list.append(root_mean_squared_error(y_validation, y_pred))
 
     # right direction
@@ -916,6 +903,9 @@ def model_Expending_window_eval(
     Return the AVG lost of the list
     (All stocks have the same max date and all stocks have records to all trading dates until max date)
 
+    NOTICE: we call this function only inside other functions, and we do the error handing inside
+            the other functions -> so we didn't do it here.
+
     NOTICE: WE SCALE THE X_FEATURES HERE!!!!
             Not all models need the x_features to be scaled, (XGBoost), so we scale where needed.
             We scale using Min-Max scaler, WE SCALE ONLY ON THE [Start date of the window,end date of the window]
@@ -940,15 +930,17 @@ def model_Expending_window_eval(
                  flag == 5 -> FullyConnectedNeuralNetwork
     :param num_of_days: The number of days to calculate the AVG on
     :param validation_type: Type of test we want to do
-                         validation_type is None -> AVG RMSE
-                         validation_type = 2 -> right direction: y_prd * t_validation > 0 <-> 1 O.W 0
-                         NOT EQUAL TO 0 BECAUSE FOR THE DUMB MODEL y_prd = 0 SO y_prd * t_validation = 0 ALWAYS
-                         validation_type = 3 -> make guess only if |y_pred| > initial_threshold
+                    validation_type == 1 or is None -> AVG RMSE
+                    validation_type == 2 -> right direction: y_prd * t_validation > 0 <-> 1 O.W 0
+                    NOT EQUAL TO 0 BECAUSE FOR THE DUMB MODEL y_prd = 0 SO y_prd * t_validation = 0 ALWAYS
+                    validation_type == 3 -> make guess only if |y_pred| > initial_threshold
+                    validation_type == 4 -> money made
     :param initial_threshold: This is the initial_threshold the |y_pred| should be over to make a guess
                               So 0.02 is 2%  for example if target_col is next_day_return
     :return: The AVG metrik of the list or, if validation 3 -> AVG metrika, num of right decisions, num of wrong decisions
     """
 
+    # todo: i want to add here validation_type == 4 -> money made
 
     (og_df, start_date_train_window, end_date_train_window,
      max_date, trading_dates,
@@ -986,7 +978,7 @@ def model_Expending_window_eval(
         # the x_train, y_train are only in the [Start date of the window,end date of the window] days
         # so we can, and should scale the x_train, for the relevant models, and it won't create a leakage.
         # same logic for the validation set for the reset of the dates.
-        if(flag in relevant_models_numbers_for_x_scaling):
+        if(flag in relevant_models_and_numbers_dict_for_scaling):
             scaler = MinMaxScaler()
             x_train_scaled = pd.DataFrame(
                 scaler.fit_transform(x_train),
@@ -1032,249 +1024,32 @@ def model_Expending_window_eval(
 
 
     avg_value_in_list = float(np.mean(values_list))
-    # validation_type == 3 -> right direction |y_pred| > initial_threshold
-    if(validation_type == 3):
-        return validation_type_3_helper(values_list)
 
-    # for RMSE we don't multiply by 100
-    elif(validation_type is None):
+    # validation_type == 1 -> RMSE, we don't multiply by 100
+    if ((validation_type is None) or (validation_type == 1)):
         return avg_value_in_list
 
-    return avg_value_in_list * 100
+    # validation_type == 2 -> right direction
+    elif (validation_type == 2):
+        return avg_value_in_list * 100
+
+    # validation_type == 3 -> right direction |y_pred| > initial_threshold
+    elif(validation_type == 3):
+        return validation_type_3_helper(values_list)
+
+
+    # todo: fix this, make the money compression
+    # for now, we do the money compression in a different place
+    else:
+        raise ValueError('The money compression is in a different place.')
 
 
 
 
 
-## running the code
-initial_train_start = pd.Timestamp("2020-09-30").normalize()
-# initial_train_end = (pd.Timestamp("2026-03-16") - pd.Timedelta(days=15)).normalize()
-# the max date we have on the train_val_set right now is the max_date (2025-05-20 00:00:00)
-# so if we want 6 months before it ->
-initial_train_end = pd.Timestamp("2024-11-20").normalize() # for now, hard code a date from about 6 months ago
-
-# todo: for now we didn't take the currency (all are USD), date fields as well -> need to find a way to use them
-feature_cols_x = (
-    data_experiment_train_and_validation_df
-    .drop(columns=['next_day_return', 'currency', 'exchange', 'symbol', 'date']) # next_day_return is ratio (1 == 100%)
-    .columns
-    .tolist()
-)
-
-
-############################################### running the validations ###############################################
-
-
-##################################### RMSE checks #####################################
-avg_rmse_XGBoost = model_Expending_window_eval(
-    df=data_experiment_train_and_validation_df,
-    feature_cols_x=feature_cols_x,
-    target_col='next_day_return',
-    start_date_train_window=initial_train_start,
-    end_date_train_window=initial_train_end,
-    flag=1
-)
-
-# avg_rmse_Dumb_model = model_Expending_window_eval(
-#     df=data_experiment_train_and_validation_df,
-#     feature_cols_x=feature_cols_x,
-#     target_col='next_day_return',
-#     start_date_train_window=initial_train_start,
-#     end_date_train_window=initial_train_end,
-#     flag=0
-# )
-
-# avg_rmse_previous_daily_return_model = model_Expending_window_eval(
-#     df=data_experiment_train_and_validation_df,
-#     feature_cols_x=feature_cols_x,
-#     target_col='next_day_return',
-#     start_date_train_window=initial_train_start,
-#     end_date_train_window=initial_train_end,
-#     flag=2
-# )
-
-# avg_rmse_AVG_rolling_window = model_Expending_window_eval(
-#     df=data_experiment_train_and_validation_df,
-#     feature_cols_x=feature_cols_x,
-#     target_col='next_day_return',
-#     start_date_train_window=initial_train_start,
-#     end_date_train_window=initial_train_end,
-#     flag=3,
-#     num_of_days=5
-# )
-
-
-# avg_rmse_Linear_Regression = model_Expending_window_eval(
-#     df=data_experiment_train_and_validation_df,
-#     feature_cols_x=feature_cols_x,
-#     target_col='next_day_return',
-#     start_date_train_window=initial_train_start,
-#     end_date_train_window=initial_train_end,
-#     flag=4
-# )
-
-
-avg_rmse_FullyConnectedNeuralNetwork = model_Expending_window_eval(
-    df=data_experiment_train_and_validation_df,
-    feature_cols_x=feature_cols_x,
-    target_col='next_day_return',
-    start_date_train_window=initial_train_start,
-    end_date_train_window=initial_train_end,
-    flag=5,
-)
 
 
 
-############################ model gusses the right direction of the stock price check  ############################
-avg_right_direction_guess_XGBoost = model_Expending_window_eval(
-    df=data_experiment_train_and_validation_df,
-    feature_cols_x=feature_cols_x,
-    target_col='next_day_return',
-    start_date_train_window=initial_train_start,
-    end_date_train_window=initial_train_end,
-    flag = 1,
-    validation_type = 2
-)
-
-# avg_right_direction_guess_Dumb_model = model_Expending_window_eval(
-#     df=data_experiment_train_and_validation_df,
-#     feature_cols_x=feature_cols_x,
-#     target_col='next_day_return',
-#     start_date_train_window=initial_train_start,
-#     end_date_train_window=initial_train_end,
-#     flag = 0,
-#     validation_type = 2
-# )
-
-# avg_right_direction_guess_previous_daily_return_model = model_Expending_window_eval(
-#     df=data_experiment_train_and_validation_df,
-#     feature_cols_x=feature_cols_x,
-#     target_col='next_day_return',
-#     start_date_train_window=initial_train_start,
-#     end_date_train_window=initial_train_end,
-#     flag = 2,
-#     validation_type = 2
-# )
-
-#
-# avg_right_direction_guess_AVG_rolling_window = model_Expending_window_eval(
-#     df=data_experiment_train_and_validation_df,
-#     feature_cols_x=feature_cols_x,
-#     target_col='next_day_return',
-#     start_date_train_window=initial_train_start,
-#     end_date_train_window=initial_train_end,
-#     flag = 3,
-#     num_of_days = 5,
-#     validation_type = 2
-# )
-#
-#
-# avg_right_direction_guess_Linear_Regression = model_Expending_window_eval(
-#     df=data_experiment_train_and_validation_df,
-#     feature_cols_x=feature_cols_x,
-#     target_col='next_day_return',
-#     start_date_train_window=initial_train_start,
-#     end_date_train_window=initial_train_end,
-#     flag=4,
-#     validation_type = 2
-# )
-
-avg_right_direction_guess_FullyConnectedNeuralNetwork = model_Expending_window_eval(
-    df=data_experiment_train_and_validation_df,
-    feature_cols_x=feature_cols_x,
-    target_col='next_day_return',
-    start_date_train_window=initial_train_start,
-    end_date_train_window=initial_train_end,
-    flag = 5,
-    validation_type = 2
-)
-
-
-
-###################### model gusses the right direction above threshold of the stock price check  ######################
-avg_right_direction_above_threshold_guess_XGBoost,num_of_right_decisions_direction_above_threshold_XGBoost, \
-    num_of_wrong_decisions_direction_above_threshold_XGBoost = model_Expending_window_eval(
-    df=data_experiment_train_and_validation_df,
-    feature_cols_x=feature_cols_x,
-    target_col='next_day_return',
-    start_date_train_window=initial_train_start,
-    end_date_train_window=initial_train_end,
-    flag = 1,
-    validation_type = 3,
-    initial_threshold = 0.015
-)
-
-# (avg_right_direction_above_threshold_guess_Dumb_model,
-#  num_of_right_decisions_direction_above_threshold_Dumb_model,
-#  num_of_wrong_decisions_direction_above_threshold_Dumb_model) = model_Expending_window_eval(
-#     df=data_experiment_train_and_validation_df,
-#     feature_cols_x=feature_cols_x,
-#     target_col='next_day_return',
-#     start_date_train_window=initial_train_start,
-#     end_date_train_window=initial_train_end,
-#     flag = 0,
-#     validation_type = 3,
-#     initial_threshold = 0.015
-# )
-#
-# (avg_right_direction_above_threshold_guess_previous_daily_return_model,
-#  num_of_right_decisions_direction_above_threshold_previous_daily_return,
-#  num_of_wrong_decisions_direction_above_threshold_previous_daily_return) = model_Expending_window_eval(
-#     df=data_experiment_train_and_validation_df,
-#     feature_cols_x=feature_cols_x,
-#     target_col='next_day_return',
-#     start_date_train_window=initial_train_start,
-#     end_date_train_window=initial_train_end,
-#     flag = 2,
-#     validation_type = 3,
-#     initial_threshold = 0.015
-# )
-#
-# #
-# (avg_right_direction_above_threshold_guess_AVG_rolling_window,
-#  num_of_right_decisions_direction_above_threshold_AVG_rolling_window,
-#  num_of_wrong_decisions_direction_above_threshold_AVG_rolling_window)\
-#     = model_Expending_window_eval(
-#     df=data_experiment_train_and_validation_df,
-#     feature_cols_x=feature_cols_x,
-#     target_col='next_day_return',
-#     start_date_train_window=initial_train_start,
-#     end_date_train_window=initial_train_end,
-#     flag = 3,
-#     num_of_days = 5,
-#     validation_type = 3,
-#     initial_threshold = 0.015
-# )
-#
-#
-# (avg_right_direction_above_threshold_guess_Linear_Regression,
-#  num_of_right_decisions_direction_above_threshold_Linear_Regression,
-#  num_of_wrong_decisions_direction_above_threshold_Linear_Regression
-#  )\
-#     = model_Expending_window_eval(
-#     df=data_experiment_train_and_validation_df,
-#     feature_cols_x=feature_cols_x,
-#     target_col='next_day_return',
-#     start_date_train_window=initial_train_start,
-#     end_date_train_window=initial_train_end,
-#     flag=4,
-#     validation_type = 3,
-#     initial_threshold = 0.015
-# )
-
-
-(avg_right_direction_above_threshold_guess_FullyConnectedNeuralNetwork,
- num_of_right_decisions_direction_above_threshold_FullyConnectedNeuralNetwork,
- num_of_wrong_decisions_direction_above_threshold_FullyConnectedNeuralNetwork) = model_Expending_window_eval(
-    df=data_experiment_train_and_validation_df,
-    feature_cols_x=feature_cols_x,
-    target_col='next_day_return',
-    start_date_train_window=initial_train_start,
-    end_date_train_window=initial_train_end,
-    flag = 5,
-    validation_type = 3,
-    initial_threshold = 0.015
-)
 
 
 # todo: fix direction of the > <
@@ -1287,13 +1062,18 @@ def compare_models(model_1_name: str, model_1_score: float,
     # Determine the label
     """
     This just compares the output of two different models on the same validation.
-    :param model_1_name:
-    :param model_1_score:
-    :param model_2_name:
-    :param model_2_score:
-    :param validation_type:
+    :param model_1_name: The name of the first model.
+    :param model_1_score: The score of the first model on the selected test type.
+    :param model_2_name: The name of the second model.
+    :param model_2_score: The score of the second model on the selected test type.
+    :param validation_type: the type of test we want to do
+                            validation_type == 1 or is None -> AVG RMSE
+                            validation_type == 2 -> AVG % right direction
+                            validation_type == 3 -> AVG % right direction over threshold
     :return: Nothing, just prints the comparison results.
     """
+    # so validation_type is None or validation_type == 1 ->
+    # we do the AVG RMSE test.
     text = 'AVG RMSE'
     if(validation_type == 2):
         text = 'AVG % right direction'
@@ -1304,7 +1084,7 @@ def compare_models(model_1_name: str, model_1_score: float,
     # If type 1: model_1 is better if score is LOWER
     # If type 2: model_1 is better if score is HIGHER
     # if type 3: model_1 is better if score is HIGHER
-    if validation_type is None:
+    if ((validation_type is None) or (validation_type == 1)):
         m1_wins = model_1_score < model_2_score
         operator = "<"
     else:
@@ -1321,153 +1101,12 @@ def compare_models(model_1_name: str, model_1_score: float,
         print(f"{text}: {model_2_score} {alt_operator} {model_1_score}\n")
 
     if validation_type == 3:
-        print(f'num of right decisions {model_1_name} : {num_of_right_decisions_model_1},'
-              f' num of wrong decisions {model_1_name} : {num_of_wrong_decisions_model_1}')
+        print(f'This is the right direction over threshold comp:\n')
+        print(f'Num of right decisions {model_1_name} : {num_of_right_decisions_model_1},'
+              f'Num of wrong decisions {model_1_name} : {num_of_wrong_decisions_model_1}')
 
-        print(f'num of right decisions model {model_2_name} : {num_of_right_decisions_model_2},'
-              f' num of wrong decisions model {model_2_name} : {num_of_wrong_decisions_model_2}\n')
-
-# compare_models("XGBoost model", avg_rmse_XGBoost,
-#                "avg rmse Linear Regression",
-#                avg_rmse_Linear_Regression)
-#
-# compare_models("XGBoost model", avg_right_direction_guess_XGBoost,
-#                "Linear_Regression", avg_right_direction_guess_Linear_Regression,2)
-#
-# compare_models("XGBoost model", avg_right_direction_above_threshold_guess_XGBoost,
-#                "Linear_Regression", avg_right_direction_above_threshold_guess_Linear_Regression,3,
-#                num_of_right_decisions_direction_above_threshold_XGBoost,
-#                num_of_wrong_decisions_direction_above_threshold_XGBoost,
-#                num_of_right_decisions_direction_above_threshold_Linear_Regression,
-#                num_of_wrong_decisions_direction_above_threshold_Linear_Regression
-#                )
-
-
-compare_models("XGBoost model", avg_rmse_XGBoost,
-               "avg rmse FullyConnectedNeuralNetwork",
-               avg_rmse_FullyConnectedNeuralNetwork)
-
-compare_models("XGBoost model", avg_right_direction_guess_XGBoost,
-               "FullyConnectedNeuralNetwork",
-               avg_right_direction_guess_FullyConnectedNeuralNetwork,2)
-
-compare_models("XGBoost model", avg_right_direction_above_threshold_guess_XGBoost,
-               "FullyConnectedNeuralNetwork",
-               avg_right_direction_above_threshold_guess_FullyConnectedNeuralNetwork,3,
-               num_of_right_decisions_direction_above_threshold_XGBoost,
-               num_of_wrong_decisions_direction_above_threshold_XGBoost,
-               num_of_right_decisions_direction_above_threshold_FullyConnectedNeuralNetwork,
-               num_of_wrong_decisions_direction_above_threshold_FullyConnectedNeuralNetwork
-               )
-
-
-#######################################running the money made simulation#######################################
-
-"""
-for now, the only models that need the relevant_col_name field are the PreviousDayReturnModel 
-and RollingAvgModel, and they receive it in the __init__.
-RollingAvgModel is the only model that need the num_of_days field, and he recives it in the __init__.
-"""
-
-# XGBoost
-(money_made_lost_XGBoost,
- percent_made_lost_XGBoost,
- history_df_XGBoost, number_of_buys_XGBoost,
- number_of_sells_XGBoost) = run_model_simulation_backvalidation(
-    df=data_experiment_train_and_validation_df,
-    feature_cols_x=feature_cols_x,
-    target_col="next_day_return",
-    start_date_train_window=initial_train_start,
-    end_date_train_window=initial_train_end,
-    model=get_model(flag = 1, relevant_col_name = "daily_return_percentage"),  # XGBoost
-    price_col="close",
-    initial_cash=10_000.0,
-    min_y_pred_to_buy=0.02,
-    max_y_pred_to_sell=-0.02,
-    transaction_fee=0.0,
-    max_spending_for_a_day=3_000.0
-)
-
-
-
-# previous_daily_return
-# (money_made_lost_previous_daily_return,
-#  percent_made_lost_previous_daily_return,
-#  history_df_previous_daily_return, number_of_buys_previous_daily_return,
-#  number_of_sells_previous_daily_return) = run_model_simulation_backvalidation(
-#     df=data_experiment_train_and_validation_df,
-#     feature_cols_x=feature_cols_x,
-#     target_col="next_day_return",
-#     start_date_train_window=initial_train_start,
-#     end_date_train_window=initial_train_end,
-#     model=get_model(flag = 2, relevant_col_name = "daily_return_percentage"),  # previous_daily_return
-#     price_col="close",
-#     initial_cash=10_000.0,
-#     min_y_pred_to_buy=0.02,
-#     max_y_pred_to_sell=-0.02,
-#     transaction_fee=0.0,
-#     max_spending_for_a_day=3_000.0
-# )
-
-# rolling_avg_baseline
-# (money_made_lost_rolling_avg_baseline,
-#  percent_made_lost_rolling_avg_baseline,
-#  history_df_rolling_avg_baseline, number_of_buys_rolling_avg_baseline,
-#  number_of_sells_rolling_avg_baseline) = run_model_simulation_backvalidation(
-#     df=data_experiment_train_and_validation_df,
-#     feature_cols_x=feature_cols_x,
-#     target_col="next_day_return",
-#     start_date_train_window=initial_train_start,
-#     end_date_train_window=initial_train_end,
-#     model=get_model(flag = 3,num_of_days=5, relevant_col_name="daily_return_percentage"),  # rolling_avg_baseline
-#     price_col="close",
-#     initial_cash=10_000.0,
-#     min_y_pred_to_buy=0.02,
-#     max_y_pred_to_sell=-0.02,
-#     transaction_fee=0.0,
-#     max_spending_for_a_day=3_000.0
-# )
-
-# Linear_Regression
-# (money_made_lost_Linear_Regression,
-#  percent_made_lost_Linear_Regression,
-#  history_df_Linear_Regression, number_of_buys_Linear_Regression,
-#  number_of_sells_Linear_Regression) = run_model_simulation_backvalidation(
-#     df=data_experiment_train_and_validation_df,
-#     feature_cols_x=feature_cols_x,
-#     target_col="next_day_return",
-#     start_date_train_window=initial_train_start,
-#     end_date_train_window=initial_train_end,
-#     model=get_model(flag = 4, relevant_col_name = "daily_return_percentage"),  # Linear Regression
-#     price_col="close",
-#     initial_cash=10_000.0,
-#     min_y_pred_to_buy=0.02,
-#     max_y_pred_to_sell=-0.02,
-#     transaction_fee=0.0,
-#     max_spending_for_a_day=3_000.0
-# )
-
-
-# FullyConnectedNeuralNetwork
-(money_made_lost_FullyConnectedNeuralNetwork,
- percent_made_lost_FullyConnectedNeuralNetwork,
- history_df_FullyConnectedNeuralNetwork, number_of_buys_FullyConnectedNeuralNetwork,
- number_of_sells_FullyConnectedNeuralNetwork) = run_model_simulation_backvalidation(
-    df=data_experiment_train_and_validation_df,
-    feature_cols_x=feature_cols_x,
-    target_col="next_day_return",
-    start_date_train_window=initial_train_start,
-    end_date_train_window=initial_train_end,
-    model=get_model(flag = 5,
-                    num_of_x_fields = len(feature_cols_x)),  # FullyConnectedNeuralNetwork
-    price_col="close",
-    initial_cash=10_000.0,
-    min_y_pred_to_buy=0.02,
-    max_y_pred_to_sell=-0.02,
-    transaction_fee=0.0,
-    max_spending_for_a_day=3_000.0
-)
-
+        print(f'Num of right decisions model {model_2_name} : {num_of_right_decisions_model_2},'
+              f'Num of wrong decisions model {model_2_name} : {num_of_wrong_decisions_model_2}\n')
 
 
 
@@ -1476,7 +1115,7 @@ def money_made_comparison(name_model_1,money_made_lost_model_1, percent_made_los
                           number_of_sells_model_1, history_df_model_1,
                           name_model_2,money_made_lost_model_2, percent_made_lost_2, number_of_buys_model_2,
                           number_of_sells_model_2, history_df_model_2
-                          ):
+                          ) -> None:
     """
     Compares two models, which made more money in a given time period and budget.
     :param name_model_1: The name of model 1
@@ -1498,7 +1137,7 @@ def money_made_comparison(name_model_1,money_made_lost_model_1, percent_made_los
     print(f'amount of stocks sold {name_model_1}: {number_of_sells_model_1}')
     print(history_df_model_1.tail())
     print(f'number of trading days for both models:'
-          f'{name_model_1}: {len(history_df_model_1)}'
+          f'{name_model_1}: {len(history_df_model_1)} ,'
           f'{name_model_2}: {len(history_df_model_2)}')
 
     print(f"Money made/lost {name_model_2}:", money_made_lost_model_2)
@@ -1517,38 +1156,407 @@ def money_made_comparison(name_model_1,money_made_lost_model_1, percent_made_los
 
 
 
-# money_made_comparison('XGBoost', money_made_lost_XGBoost,percent_made_lost_XGBoost,
-#                       number_of_buys_XGBoost, number_of_sells_XGBoost,
-#                       history_df_XGBoost,
-#                       'Linear regression',money_made_lost_Linear_Regression,
-#                       percent_made_lost_Linear_Regression,
-#                       number_of_buys_Linear_Regression, number_of_sells_Linear_Regression,
-#                       history_df_Linear_Regression)
-
-# money_made_comparison('rolling_avg_baseline', money_made_lost_rolling_avg_baseline,
-#                       percent_made_lost_rolling_avg_baseline,
-#                       number_of_buys_rolling_avg_baseline, number_of_sells_rolling_avg_baseline,
-#                       history_df_rolling_avg_baseline,
-#                       'previous_daily_return',money_made_lost_previous_daily_return,
-#                       percent_made_lost_previous_daily_return,
-#                       number_of_buys_previous_daily_return, number_of_sells_previous_daily_return,
-#                       history_df_previous_daily_return)
-
-
-money_made_comparison('XGBoost', money_made_lost_XGBoost,percent_made_lost_XGBoost,
-                      number_of_buys_XGBoost, number_of_sells_XGBoost,
-                      history_df_XGBoost,
-                      'FullyConnectedNeuralNetwork',money_made_lost_FullyConnectedNeuralNetwork,
-                      percent_made_lost_FullyConnectedNeuralNetwork,
-                      number_of_buys_FullyConnectedNeuralNetwork, number_of_sells_FullyConnectedNeuralNetwork,
-                      history_df_FullyConnectedNeuralNetwork)
-
 
 # todo: find how to use dates because I understand XGBoost can't use dates
 # todo: find using a greedy approach what are the best comb of
 # todo: fields is the best
 # todo: think of a way to calculate the regret -> write it in the eval.py file
 # todo: think about adding Heuristics
+
+
+def all_dict_keys_and_values(options_dict:  dict[int, str] | None = None):
+    """
+    Returns a string with the names and numbers of all the models.
+    Uses a gloabal dict of the models and their names if nothing else is given.
+    If a dict is given, we just work on it.
+    :param options_dict: The dict we want to loop over and print.
+    :return: A string with the names and numbers of all the models.
+    """
+
+    if options_dict is None:
+        options_dict = relevant_models_and_numbers_dict
+
+    result = "\nThese are the options: \n"
+    for option in options_dict:
+        result += str(option) + ": " + options_dict[option] + "\n"
+    result += '\nenter the number you want'
+
+    return result
+
+def model_score_getter(model_flag: int, test_type: int | None,
+                       num_of_days: int| None = 5,
+                       initial_threshold: float| None = 0.015) -> float | tuple[float, int, int]:
+    """
+    Gets a model_flag and wanted test type, returns the score of the model
+    :param model_flag: The type of model we want to create
+            model_flag == 0 -> dumb model
+            model_flag == 1 -> XGBoost model
+            model_flag == 2 -> previous daily return pred
+            model_flag == 3 -> rolling AVG pred
+            model_flag == 4 -> Linear regression
+            model_flag == 5 -> FullyConnectedNeuralNetwork
+
+    :param test_type: The type of test we want to do.
+            test_type = 1 -> RMSE
+            test_type = 2 -> right direction
+            test_type = 3 -> right direction over threshold
+
+
+    :param num_of_days: The num of days to use for the rolling avg score -> relevant only for this.
+    :param initial_threshold: The initial threshold -> relevant only if we do the right direction over threshold test.
+    :return: The score of the selected model on the selected test type.
+    """
+
+
+    # todo: relevant_models_and_numbers_dict is hard coded here -> maybe change later
+    if not (model_flag in relevant_models_and_numbers_dict):
+        raise ValueError('model_flag must be in the relevant_models_and_numbers_dict.')
+
+    if not((test_type is None) or (test_type in validation_types_dict)):
+        raise ValueError('test_flag is not valid.')
+
+    # we will use these var only for test_type == 3
+    avg_right_direction_above_threshold_guess_model = 0.0
+    num_of_right_decisions_direction_above_threshold_model = 0
+    num_of_wrong_decisions_direction_above_threshold_model = 0
+
+    model_score = None
+    # RMSE or right direction
+    if ((test_type is None) or (test_type == 1) or (test_type == 2)):
+        if(model_flag == 3):
+            model_score = model_Expending_window_eval(
+                df=data_experiment_train_and_validation_df,
+                feature_cols_x=feature_cols_x,
+                target_col='next_day_return',
+                start_date_train_window=initial_train_start,
+                end_date_train_window=initial_train_end,
+                flag=model_flag,
+                num_of_days = num_of_days,
+                validation_type = test_type
+            )
+        else:
+            model_score = model_Expending_window_eval(
+                df=data_experiment_train_and_validation_df,
+                feature_cols_x=feature_cols_x,
+                target_col='next_day_return',
+                start_date_train_window=initial_train_start,
+                end_date_train_window=initial_train_end,
+                flag=model_flag,
+                validation_type=test_type
+            )
+
+        return model_score
+
+
+    # right direction over threshold
+    elif(test_type == 3):
+        # rolling AVG pred
+        if(model_flag == 3):
+            (avg_right_direction_above_threshold_guess_model,
+             num_of_right_decisions_direction_above_threshold_model,
+             num_of_wrong_decisions_direction_above_threshold_model)\
+                = model_Expending_window_eval(
+                df=data_experiment_train_and_validation_df,
+                feature_cols_x=feature_cols_x,
+                target_col='next_day_return',
+                start_date_train_window=initial_train_start,
+                end_date_train_window=initial_train_end,
+                flag = model_flag,
+                num_of_days = num_of_days,
+                validation_type = test_type,
+                initial_threshold = initial_threshold
+            )
+
+        # for every model != 3 -> there is no need for the num_of_days = num_of_days var,
+        # that is the only difference.
+        else:
+            (avg_right_direction_above_threshold_guess_model,
+             num_of_right_decisions_direction_above_threshold_model,
+             num_of_wrong_decisions_direction_above_threshold_model) \
+                = model_Expending_window_eval(
+                df=data_experiment_train_and_validation_df,
+                feature_cols_x=feature_cols_x,
+                target_col='next_day_return',
+                start_date_train_window=initial_train_start,
+                end_date_train_window=initial_train_end,
+                flag=model_flag,
+
+                validation_type=test_type,
+                initial_threshold=initial_threshold
+            )
+
+    # NOTICE: we don't have to write the last test_type in an "elif", it can be in an "else"
+    # because we already checked the test_type is legal.
+    # I choose to write it as such because it is clearer!
+
+
+
+    return (avg_right_direction_above_threshold_guess_model,
+            num_of_right_decisions_direction_above_threshold_model,
+            num_of_wrong_decisions_direction_above_threshold_model)
+
+
+
+
+
+
+def test_type_models_to_compare():
+    """
+    This is a helper function to help as compare between two models.
+    We select:
+        1. test type -> RMSE, right direction, right_direction_over_threshold
+        2. the model to compare between
+    :return: prints the results of the comparison
+    """
+    model_name_1 = None
+    model_name_2 = None
+    while(True):
+        print(all_dict_keys_and_values())
+        model_flag_1 = int(input("Type the number of model 1: "))
+        model_flag_2 = int(input("Type the number of model 2: "))
+        if ( (model_flag_1 in relevant_models_and_numbers_dict) and
+                (model_flag_2 in relevant_models_and_numbers_dict) and
+                (model_flag_1 != model_flag_2) ):
+            model_name_1 = relevant_models_and_numbers_dict[model_flag_1]
+            model_name_2 = relevant_models_and_numbers_dict[model_flag_2]
+            break
+        else:
+            print("Invalid choice.")
+
+
+    # making sure the users write a valid answer
+    while(True):
+        print(all_dict_keys_and_values(validation_types_dict))
+        test_flag = int(input('select the test type you want to use for the comparison: '))
+        if test_flag in validation_types_dict:
+            break
+        else:
+            print("Invalid choice.")
+
+
+    if (test_flag == 3):
+        (avg_right_direction_above_threshold_guess_model_1,
+         num_of_right_decisions_direction_above_threshold_model_1,
+         num_of_wrong_decisions_direction_above_threshold_model_1) = model_score_getter(model_flag = model_flag_1,
+                                                                                   test_type = test_flag)
+
+        (avg_right_direction_above_threshold_guess_model_2,
+         num_of_right_decisions_direction_above_threshold_model_2,
+         num_of_wrong_decisions_direction_above_threshold_model_2) = model_score_getter(model_flag = model_flag_2,
+                                                                                   test_type = test_flag)
+
+        compare_models(model_1_name = model_name_1, model_1_score = avg_right_direction_above_threshold_guess_model_1,
+                       model_2_name = model_name_2, model_2_score =  avg_right_direction_above_threshold_guess_model_2,
+                       validation_type = test_flag,
+                       num_of_right_decisions_model_1 = num_of_right_decisions_direction_above_threshold_model_1,
+                       num_of_wrong_decisions_model_1 = num_of_wrong_decisions_direction_above_threshold_model_1,
+                       num_of_right_decisions_model_2 = num_of_right_decisions_direction_above_threshold_model_2,
+                       num_of_wrong_decisions_model_2 = num_of_wrong_decisions_direction_above_threshold_model_2)
+
+
+    else:
+        model_1_score = model_score_getter(model_flag = model_flag_1, test_type = test_flag)
+        model_2_score = model_score_getter(model_flag = model_flag_2, test_type = test_flag)
+
+        # comparing the models
+        compare_models(model_1_name = model_name_1, model_1_score = model_1_score,
+                       model_2_name = model_name_2, model_2_score = model_2_score,
+                       validation_type = test_flag)
+
+
+
+
+
+"""
+Inside this block we write all the code that we want to execute each time we run the code.
+"""
+if __name__ == "__main__":
+    data_experiment_train_and_validation_df = unpickle_data(experiment_train_and_validation_pickle_file_path)
+    data_experiment_train_and_validation_df = data_experiment_train_and_validation_df.loc[:, ~data_experiment_train_and_validation_df.columns.duplicated()].copy()
+
+    # a part to check there is no data leakage
+    df_check = data_experiment_train_and_validation_df.copy()
+    df_check["date"] = pd.to_datetime(df_check["date"])
+    df_check = df_check.sort_values(["symbol", "date"]).reset_index(drop=True)
+
+    # same-day return: (close_t - close_t-1) / close_t-1
+    df_check["same_day_return_check"] = (
+        df_check.groupby("symbol")["close"].pct_change(1)
+    )
+
+    # next-day return on row t: (close_t+1 - close_t) / close_t
+    df_check["next_day_return_check"] = (
+            df_check.groupby("symbol")["close"].shift(-1) / df_check["close"] - 1
+    )
+
+    print("Matches same-day target:",
+          np.isclose(
+              df_check["daily_return_percentage"],
+              df_check["same_day_return_check"],
+              equal_nan=True
+          ).mean())
+
+    print("Matches next-day target:",
+          np.isclose(
+              df_check["next_day_return"],
+              df_check["next_day_return_check"],
+              equal_nan=True
+          ).mean())
+
+    ## running the code
+    initial_train_start = pd.Timestamp("2020-09-30").normalize()
+    # initial_train_end = (pd.Timestamp("2026-03-16") - pd.Timedelta(days=15)).normalize()
+    # the max date we have on the train_val_set right now is the max_date (2025-05-20 00:00:00)
+    # so if we want 6 months before it ->
+    initial_train_end = pd.Timestamp("2024-11-20").normalize()  # for now, hard code a date from about 6 months ago
+
+    # todo: for now we didn't take the currency (all are USD), date fields as well -> need to find a way to use them
+    feature_cols_x = (
+        data_experiment_train_and_validation_df
+        .drop(columns=['next_day_return', 'currency', 'exchange', 'symbol',
+                       'date'])  # next_day_return is ratio (1 == 100%)
+        .columns
+        .tolist()
+    )
+
+    ############################################### running the validations ###############################################
+
+    """
+    I made a dynamic function that asks the user:
+    1. what models he want to compare.
+    2. in what type of test he wants to compare them.
+    """
+    test_type_models_to_compare()
+
+    #######################################running the money made simulation#######################################
+
+    """
+    for now, the only models that need the relevant_col_name field are the PreviousDayReturnModel 
+    and RollingAvgModel, and they receive it in the __init__.
+    RollingAvgModel is the only model that need the num_of_days field, and he recives it in the __init__.
+    """
+
+    # XGBoost
+    (money_made_lost_XGBoost,
+     percent_made_lost_XGBoost,
+     history_df_XGBoost, number_of_buys_XGBoost,
+     number_of_sells_XGBoost) = run_model_simulation_backvalidation(
+        df=data_experiment_train_and_validation_df,
+        feature_cols_x=feature_cols_x,
+        target_col="next_day_return",
+        start_date_train_window=initial_train_start,
+        end_date_train_window=initial_train_end,
+        model=get_model(flag=1, relevant_col_name="daily_return_percentage"),  # XGBoost
+        price_col="close",
+        initial_cash=10_000.0,
+        min_y_pred_to_buy=0.02,
+        max_y_pred_to_sell=-0.02,
+        transaction_fee=0.0,
+        max_spending_for_a_day=3_000.0
+    )
+
+    # previous_daily_return
+    # (money_made_lost_previous_daily_return,
+    #  percent_made_lost_previous_daily_return,
+    #  history_df_previous_daily_return, number_of_buys_previous_daily_return,
+    #  number_of_sells_previous_daily_return) = run_model_simulation_backvalidation(
+    #     df=data_experiment_train_and_validation_df,
+    #     feature_cols_x=feature_cols_x,
+    #     target_col="next_day_return",
+    #     start_date_train_window=initial_train_start,
+    #     end_date_train_window=initial_train_end,
+    #     model=get_model(flag = 2, relevant_col_name = "daily_return_percentage"),  # previous_daily_return
+    #     price_col="close",
+    #     initial_cash=10_000.0,
+    #     min_y_pred_to_buy=0.02,
+    #     max_y_pred_to_sell=-0.02,
+    #     transaction_fee=0.0,
+    #     max_spending_for_a_day=3_000.0
+    # )
+
+    # rolling_avg_baseline
+    # (money_made_lost_rolling_avg_baseline,
+    #  percent_made_lost_rolling_avg_baseline,
+    #  history_df_rolling_avg_baseline, number_of_buys_rolling_avg_baseline,
+    #  number_of_sells_rolling_avg_baseline) = run_model_simulation_backvalidation(
+    #     df=data_experiment_train_and_validation_df,
+    #     feature_cols_x=feature_cols_x,
+    #     target_col="next_day_return",
+    #     start_date_train_window=initial_train_start,
+    #     end_date_train_window=initial_train_end,
+    #     model=get_model(flag = 3,num_of_days=5, relevant_col_name="daily_return_percentage"),  # rolling_avg_baseline
+    #     price_col="close",
+    #     initial_cash=10_000.0,
+    #     min_y_pred_to_buy=0.02,
+    #     max_y_pred_to_sell=-0.02,
+    #     transaction_fee=0.0,
+    #     max_spending_for_a_day=3_000.0
+    # )
+
+    # Linear_Regression
+    (money_made_lost_Linear_Regression,
+     percent_made_lost_Linear_Regression,
+     history_df_Linear_Regression, number_of_buys_Linear_Regression,
+     number_of_sells_Linear_Regression) = run_model_simulation_backvalidation(
+        df=data_experiment_train_and_validation_df,
+        feature_cols_x=feature_cols_x,
+        target_col="next_day_return",
+        start_date_train_window=initial_train_start,
+        end_date_train_window=initial_train_end,
+        model=get_model(flag = 4, relevant_col_name = "daily_return_percentage"),  # Linear Regression
+        price_col="close",
+        initial_cash=10_000.0,
+        min_y_pred_to_buy=0.02,
+        max_y_pred_to_sell=-0.02,
+        transaction_fee=0.0,
+        max_spending_for_a_day=3_000.0
+    )
+
+    # FullyConnectedNeuralNetwork
+    # (money_made_lost_FullyConnectedNeuralNetwork,
+    #  percent_made_lost_FullyConnectedNeuralNetwork,
+    #  history_df_FullyConnectedNeuralNetwork, number_of_buys_FullyConnectedNeuralNetwork,
+    #  number_of_sells_FullyConnectedNeuralNetwork) = run_model_simulation_backvalidation(
+    #     df=data_experiment_train_and_validation_df,
+    #     feature_cols_x=feature_cols_x,
+    #     target_col="next_day_return",
+    #     start_date_train_window=initial_train_start,
+    #     end_date_train_window=initial_train_end,
+    #     model=get_model(flag=5,
+    #                     num_of_x_fields=len(feature_cols_x)),  # FullyConnectedNeuralNetwork
+    #     price_col="close",
+    #     initial_cash=10_000.0,
+    #     min_y_pred_to_buy=0.02,
+    #     max_y_pred_to_sell=-0.02,
+    #     transaction_fee=0.0,
+    #     max_spending_for_a_day=3_000.0
+    # )
+
+    money_made_comparison('XGBoost', money_made_lost_XGBoost,percent_made_lost_XGBoost,
+                          number_of_buys_XGBoost, number_of_sells_XGBoost,
+                          history_df_XGBoost,
+                          'Linear regression',money_made_lost_Linear_Regression,
+                          percent_made_lost_Linear_Regression,
+                          number_of_buys_Linear_Regression, number_of_sells_Linear_Regression,
+                          history_df_Linear_Regression)
+
+    # money_made_comparison('rolling_avg_baseline', money_made_lost_rolling_avg_baseline,
+    #                       percent_made_lost_rolling_avg_baseline,
+    #                       number_of_buys_rolling_avg_baseline, number_of_sells_rolling_avg_baseline,
+    #                       history_df_rolling_avg_baseline,
+    #                       'previous_daily_return',money_made_lost_previous_daily_return,
+    #                       percent_made_lost_previous_daily_return,
+    #                       number_of_buys_previous_daily_return, number_of_sells_previous_daily_return,
+    #                       history_df_previous_daily_return)
+
+    # money_made_comparison('XGBoost', money_made_lost_XGBoost, percent_made_lost_XGBoost,
+    #                       number_of_buys_XGBoost, number_of_sells_XGBoost,
+    #                       history_df_XGBoost,
+    #                       'FullyConnectedNeuralNetwork', money_made_lost_FullyConnectedNeuralNetwork,
+    #                       percent_made_lost_FullyConnectedNeuralNetwork,
+    #                       number_of_buys_FullyConnectedNeuralNetwork, number_of_sells_FullyConnectedNeuralNetwork,
+    #                       history_df_FullyConnectedNeuralNetwork)
+
 
 
 
@@ -1641,11 +1649,3 @@ previous_daily_return made more money.
 
 LOOKS LIKE rolling_avg_baseline IS THE BEST!!!!!!!!
 """
-
-
-
-
-
-
-
-

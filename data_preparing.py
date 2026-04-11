@@ -14,7 +14,7 @@ import pickle
 import math
 from sklearn.preprocessing import MinMaxScaler
 from datetime import datetime, timedelta, date
-from evaluation_and_simulation import where_the_code_runs
+from runtime_config import where_the_code_runs
 
 """
 amount of data:
@@ -716,7 +716,7 @@ experiment_test_pickle_file_path = r"C:\Users\galpi\Desktop\stocks algo trading 
 if(where_the_code_runs == 2):
     experiment_pickle_file_path = r"/content/algo_trading_stocks/data/five_thousand_days_data_experiment.pkl"
     experiment_train_and_validation_pickle_file_path = r"/content/algo_trading_stocks/data/experiment_train_and_validation_data.pkl"
-experiment_test_pickle_file_path = r"/content/algo_trading_stocks/data/experiment_test_data.pkl"
+    experiment_test_pickle_file_path = r"/content/algo_trading_stocks/data/experiment_test_data.pkl"
 
 # one hot encoding but keeping the 'symbol' col
 # symbol_dummies = pd.get_dummies(five_thousand_days_data_df['symbol'], prefix='symbol')
@@ -981,7 +981,6 @@ def split_df_to_train_val_test(df: pd.DataFrame,
                                percent_for_train: float | int,
                                percent_for_val: float | int,
                                percent_for_test: float | int | None = None,
-                               from_end_or_start: str = 'start'
                                )-> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     # todo: check for edge cases, if the split is not even, if it works and takes all the rows
     """
@@ -994,7 +993,6 @@ def split_df_to_train_val_test(df: pd.DataFrame,
     :param percent_for_train: percent of the rows to take for the train set (0,100)
     :param percent_for_val: percent of the rows to take for the val set (0,100)
     :param percent_for_test: percent of the rows to take for the test set (0,100)
-    :param from_end_or_start: percent of the rows to take for the _ set
     :return: train_set, validation_set, test_set.
     """
     # take the rest to be the test set.
@@ -1022,19 +1020,10 @@ def split_df_to_train_val_test(df: pd.DataFrame,
     number_of_row_val = int(length_df * (percent_for_val / 100))
     number_of_row_test = length_df - number_of_row_val - number_of_row_train
 
-    if from_end_or_start == 'start':
-        train_set = df.iloc[:number_of_row_train]
-        validation_set = df.iloc[number_of_row_train:number_of_row_train + number_of_row_val]
-        test_set = df.iloc[number_of_row_train + number_of_row_val:]
+    train_set = df.iloc[:number_of_row_train]
+    validation_set = df.iloc[number_of_row_train:number_of_row_train + number_of_row_val]
+    test_set = df.iloc[number_of_row_train + number_of_row_val:]
 
-    elif from_end_or_start == 'end':
-        # reverse the calls, cause now we start from the test
-        train_set = df.iloc[:number_of_row_test]
-        validation_set = df.iloc[number_of_row_test:number_of_row_test + number_of_row_val]
-        test_set = df.iloc[number_of_row_test + number_of_row_val:]
-
-    else:
-        raise ValueError('from_end_or_start must be start or end.')
 
     # --- YOUR CHECKS ---
 

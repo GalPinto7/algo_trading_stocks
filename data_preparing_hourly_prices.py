@@ -18,7 +18,7 @@ from data_preparing import (pickling_func,unpickle_data, company_exchange_and_cu
                             company_earliest_timestamp_fetcher, same_start_date_for_all_stocks,
                             Earliest_Timestamps_top_40_tech_companies_daily)
 
-from evaluation_and_simulation import where_the_code_runs
+from runtime_config import where_the_code_runs
 
 """
 We will create a df with hourly prices for the 40 stocks here.
@@ -29,47 +29,6 @@ NOTICE: We might need to make changes to the models and function in evaluation_a
 """
 
 
-
-"""
-Getting the hourly prices data for the last 5000 hours -> how_many_intervals = 5,000 * 24 = 120000
-"""
-# 5000 is the max number of Requests
-# in this df there is the all the rows
-min_start_date = five_thousand_days_data_df['date'].min() #2006-05-01 00:00:00
-min_start_date_plus_five_thousand_hours = pd.to_datetime('2006-11-25')
-print(min_start_date)
-current_start_date = pd.to_datetime(min_start_date)
-five_thousand_hourly_data = all_df_creator(top_40_tech_names, '1h',
-                                           5000, start_date = current_start_date,
-                                           end_date = min_start_date_plus_five_thousand_hours) # called it once, now it is saved
-
-# this is for temp files
-pickle_hourly_temp_file_final= r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_hourly_final_data.pkl"
-# pickling the data for future use
-pickle_hourly_file_path = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_hourly_data.pkl"
-# this is for temp files
-pickle_hourly_temp_file_path = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_hourly_temp_data.pkl"
-
-# run on google colab
-if(where_the_code_runs == 2):
-    pickle_hourly_temp_file_path = r"/content/algo_trading_stocks/data/five_thousand_hourly_temp_data.pkl"
-    pickle_hourly_file_path = r"five_thousand_hourly_data.pkl"
-
-"""
-the daily df has col->'date'->2020-09-30
-we here have a col->'datetime'-> 2026-04-02 15:30:00
-so we have to: 
-1. create a 'date' col in five_thousand_hourly_data_df.
-2. put only the date in it.
-3. pickle again, easy access.
-"""
-
-# 1 + 2 + 3:
-# five_thousand_hourly_data['datetime'] = pd.to_datetime(five_thousand_hourly_data['datetime'])
-# five_thousand_hourly_data['date'] = five_thousand_hourly_data['datetime'].dt.date
-# pickling_func(five_thousand_hourly_data, pickle_hourly_file_path) # called it once, now it is saved
-first_five_thousand_hourly_data_df = unpickle_data(pickle_hourly_file_path)
-print(first_five_thousand_hourly_data_df)
 
 
 """
@@ -155,16 +114,56 @@ def create_df_of_hourly_prices(df: pd.DataFrame):
     return final_df
 
 
+"""
+Getting the hourly prices data for the last 5000 hours 
+"""
+# 5000 is the max number of Requests
+# in this df there is the all the rows
+min_start_date = five_thousand_days_data_df['date'].min()  # 2006-05-01 00:00:00
+min_start_date_plus_five_thousand_hours = pd.to_datetime('2006-11-25')
+print(min_start_date)
+current_start_date = pd.to_datetime(min_start_date)
+five_thousand_hourly_data = all_df_creator(top_40_tech_names, '1h',
+                                            5000, start_date=current_start_date,
+                                            end_date=min_start_date_plus_five_thousand_hours)  # called it once, now it is saved
+
+# this is for temp files
+pickle_hourly_temp_file_final = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_hourly_final_data.pkl"
+
+# pickling the data for future use
+pickle_hourly_file_path = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_hourly_data.pkl"
+# this is for temp files
+pickle_hourly_temp_file_path = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_hourly_temp_data.pkl"
+
+# run on google colab
+if (where_the_code_runs == 2):
+    pickle_hourly_temp_file_path = r"/content/algo_trading_stocks/data/five_thousand_hourly_temp_data.pkl"
+    pickle_hourly_file_path = r"five_thousand_hourly_data.pkl"
+
+"""
+the daily df has col->'date'->2020-09-30
+we here have a col->'datetime'-> 2026-04-02 15:30:00
+so we have to: 
+1. create a 'date' col in five_thousand_hourly_data_df.
+2. put only the date in it.
+3. pickle again, easy access.
+"""
+
+# 1 + 2 + 3:
+# five_thousand_hourly_data['datetime'] = pd.to_datetime(five_thousand_hourly_data['datetime'])
+# five_thousand_hourly_data['date'] = five_thousand_hourly_data['datetime'].dt.date
+# pickling_func(five_thousand_hourly_data, pickle_hourly_file_path) # called it once, now it is saved
+first_five_thousand_hourly_data_df = unpickle_data(pickle_hourly_file_path)
+print(first_five_thousand_hourly_data_df)
 
 final_df = create_df_of_hourly_prices(first_five_thousand_hourly_data_df)
 
-pickling_func(final_df, pickle_hourly_file_path) # called it once, now it is saved
+pickling_func(final_df, pickle_hourly_file_path)  # called it once, now it is saved
 final_five_thousand_days_of_hourly_data_df = unpickle_data(pickle_hourly_file_path)
 
 print(first_five_thousand_hourly_data_df)
 print('final_five_thousand_days_of_hourly_data_df:\n')
 print(final_five_thousand_days_of_hourly_data_df)
-
 
 
 
