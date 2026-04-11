@@ -196,7 +196,8 @@ def companies_list_earliest_timestamp_dict_fetcher(symbols_list: list[str], inte
 # the path of the Earliest_Timestamps for the top 40 teach companies
 pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\Earliest_Timestamps_daily_top_40_teach_companies_data.pkl"
 if (where_the_code_runs == 2):
-    pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies = r"pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies"
+    print('we are in the google colab -> data_preparing')
+    pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies = r"/content/algo_trading_stocks/data/Earliest_Timestamps_daily_top_40_teach_companies_data.pkl"
 
 """
 creating a dict of the Earliest_Timestamps_daily of the 40_tech_companies and pickle it.
