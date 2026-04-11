@@ -36,7 +36,7 @@ score <= 51% -> bad
 #  NOT  enough for NN / LSTMs / Transformers.
 # todo: see if you worked on a balanced time frame (#up ~ # down)?
 # todo: save all in as parquet.
-# todo: connect the whole project to gitHub.
+# todo: connect the whole project to gitHub. -> DONE.
 # todo: write here a summery of what we did in the cleaning here.
 # todo: Get hourly price data.
 # todo: Add error handling.

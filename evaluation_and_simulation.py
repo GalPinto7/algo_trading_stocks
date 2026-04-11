@@ -1494,36 +1494,16 @@ if __name__ == "__main__":
     # )
 
     # Linear_Regression
-    (money_made_lost_Linear_Regression,
-     percent_made_lost_Linear_Regression,
-     history_df_Linear_Regression, number_of_buys_Linear_Regression,
-     number_of_sells_Linear_Regression) = run_model_simulation_backvalidation(
-        df=data_experiment_train_and_validation_df,
-        feature_cols_x=feature_cols_x,
-        target_col="next_day_return",
-        start_date_train_window=initial_train_start,
-        end_date_train_window=initial_train_end,
-        model=get_model(flag = 4, relevant_col_name = "daily_return_percentage"),  # Linear Regression
-        price_col="close",
-        initial_cash=10_000.0,
-        min_y_pred_to_buy=0.02,
-        max_y_pred_to_sell=-0.02,
-        transaction_fee=0.0,
-        max_spending_for_a_day=3_000.0
-    )
-
-    # FullyConnectedNeuralNetwork
-    # (money_made_lost_FullyConnectedNeuralNetwork,
-    #  percent_made_lost_FullyConnectedNeuralNetwork,
-    #  history_df_FullyConnectedNeuralNetwork, number_of_buys_FullyConnectedNeuralNetwork,
-    #  number_of_sells_FullyConnectedNeuralNetwork) = run_model_simulation_backvalidation(
+    # (money_made_lost_Linear_Regression,
+    #  percent_made_lost_Linear_Regression,
+    #  history_df_Linear_Regression, number_of_buys_Linear_Regression,
+    #  number_of_sells_Linear_Regression) = run_model_simulation_backvalidation(
     #     df=data_experiment_train_and_validation_df,
     #     feature_cols_x=feature_cols_x,
     #     target_col="next_day_return",
     #     start_date_train_window=initial_train_start,
     #     end_date_train_window=initial_train_end,
-    #     model=get_model(flag=5,
-    #                     num_of_x_fields=len(feature_cols_x)),  # FullyConnectedNeuralNetwork
+    #     model=get_model(flag = 4, relevant_col_name = "daily_return_percentage"),  # Linear Regression
     #     price_col="close",
     #     initial_cash=10_000.0,
     #     min_y_pred_to_buy=0.02,
@@ -1532,13 +1512,33 @@ if __name__ == "__main__":
     #     max_spending_for_a_day=3_000.0
     # )
 
+    # FullyConnectedNeuralNetwork
+    (money_made_lost_FullyConnectedNeuralNetwork,
+     percent_made_lost_FullyConnectedNeuralNetwork,
+     history_df_FullyConnectedNeuralNetwork, number_of_buys_FullyConnectedNeuralNetwork,
+     number_of_sells_FullyConnectedNeuralNetwork) = run_model_simulation_backvalidation(
+        df=data_experiment_train_and_validation_df,
+        feature_cols_x=feature_cols_x,
+        target_col="next_day_return",
+        start_date_train_window=initial_train_start,
+        end_date_train_window=initial_train_end,
+        model=get_model(flag=5,
+                        num_of_x_fields=len(feature_cols_x)),  # FullyConnectedNeuralNetwork
+        price_col="close",
+        initial_cash=10_000.0,
+        min_y_pred_to_buy=0.02,
+        max_y_pred_to_sell=-0.02,
+        transaction_fee=0.0,
+        max_spending_for_a_day=3_000.0
+    )
+
     money_made_comparison('XGBoost', money_made_lost_XGBoost,percent_made_lost_XGBoost,
                           number_of_buys_XGBoost, number_of_sells_XGBoost,
                           history_df_XGBoost,
-                          'Linear regression',money_made_lost_Linear_Regression,
-                          percent_made_lost_Linear_Regression,
-                          number_of_buys_Linear_Regression, number_of_sells_Linear_Regression,
-                          history_df_Linear_Regression)
+                          'Linear regression',money_made_lost_FullyConnectedNeuralNetwork,
+                          percent_made_lost_FullyConnectedNeuralNetwork,
+                          number_of_buys_FullyConnectedNeuralNetwork, number_of_sells_FullyConnectedNeuralNetwork,
+                          history_df_FullyConnectedNeuralNetwork)
 
     # money_made_comparison('rolling_avg_baseline', money_made_lost_rolling_avg_baseline,
     #                       percent_made_lost_rolling_avg_baseline,
