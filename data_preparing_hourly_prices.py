@@ -1,24 +1,15 @@
-# import WakaTime
-# email
-# regulr password
-from __future__ import annotations
-
 import pandas as pd
-from pathlib import Path
-import matplotlib.pyplot as plt
-import numpy as np
-import requests
-from twelvedata import TDClient
-import time
-import pickle
-import math
-from data_preparing import (pickling_func,unpickle_data, company_exchange_and_currency_fetcher,
-                            company_data_prices_fetcher, all_df_creator, adding_col_with_values,
-                            move_col_position_in_df, top_40_tech_names, five_thousand_days_data_df,
-                            company_earliest_timestamp_fetcher, same_start_date_for_all_stocks,
-                            Earliest_Timestamps_top_40_tech_companies_daily)
 
-from runtime_config import where_the_code_runs
+from data_preparing import (
+    pickling_func,
+    unpickle_data,
+    load_top_40_tech_companies_names,
+    load_five_thousand_days_data_df,
+    load_Earliest_Timestamps_top_40_tech_companies_hourly,
+    Access_the_file_path
+)
+from twelve_data_api import all_df_creator
+from runtime_config import get_where_the_code_runs
 
 """
 We will create a df with hourly prices for the 40 stocks here.
@@ -36,10 +27,28 @@ Add alot more rows to the df
 """
 
 
-def create_df_of_hourly_prices(df: pd.DataFrame):
+
+#####################################################paths of files#####################################################
+# this is for final files
+pickle_hourly_temp_file_final_local = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_hourly_final_data.pkl"
+pickle_hourly_temp_file_final_google_colab = r"/content/algo_trading_stocks/data/five_thousand_hourly_final_data.pkl"
+
+
+# pickling the data for future use
+pickle_hourly_file_path_local = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_hourly_data.pkl"
+pickle_hourly_file_path_google_colab = r"/content/algo_trading_stocks/data/five_thousand_hourly_data.pkl"
+
+# this is for temp files
+pickle_hourly_temp_file_path_local = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_hourly_temp_data.pkl"
+pickle_hourly_temp_file_path_google_colab = r"/content/algo_trading_stocks/data/five_thousand_hourly_temp_data.pkl"
+########################################################################################################################
+
+
+def create_df_of_hourly_prices(df: pd.DataFrame, companies_list_earliest_timestamp_dict: dict):
     """
     Uses the function from the data_preparing to get the hourly prices.
     :param df: The df we want to add hourly prices to.
+    :param companies_list_earliest_timestamp_dict: A dict with the earliest_timestamp od each of the 40 companies.
     :return: A df with hourly prices of the stocks in the df for the same dates as in the df.
     """
 
@@ -64,8 +73,9 @@ def create_df_of_hourly_prices(df: pd.DataFrame):
     # first call
     hourly_prices_df = all_df_creator(
         final_df['symbol'].unique().tolist(),
-        '1h',
-        5000,
+        wanted_interval='1h',
+        how_many_intervals= 5000,
+        companies_list_earliest_timestamp_dict = companies_list_earliest_timestamp_dict,
         start_date=current_start_date,
         end_date = current_end_date
     )
@@ -94,8 +104,9 @@ def create_df_of_hourly_prices(df: pd.DataFrame):
         # i do not think we need to add a 'sleep(60)' here because there is one in the all_df_creator function
         ####
         # so we won't hard code the stocks: top_40_tech_names -> top_40_tech_names
-
-        hourly_prices_df = all_df_creator(final_df['symbol'].unique().tolist(), '1h',5000,
+        hourly_prices_df = all_df_creator(ticker_list = final_df['symbol'].unique().tolist(),wanted_interval = '1h',
+                                          how_many_intervals = 5000,
+                                          companies_list_earliest_timestamp_dict = companies_list_earliest_timestamp_dict,
                                           start_date = current_start_date,
                                           end_date = current_end_date)
         # adding the date col
@@ -114,65 +125,83 @@ def create_df_of_hourly_prices(df: pd.DataFrame):
     return final_df
 
 
+
+def main() -> None:
+    """
+    Getting the hourly prices data for the last 5000 hours
+    """
+    # running locally or on Google colab
+    where_the_code_runs = get_where_the_code_runs()
+    # 5000 is the max number of Requests
+    # in this df there is the all the rows
+    five_thousand_days_data_df = load_five_thousand_days_data_df(where_the_code_runs = where_the_code_runs)
+
+    # getting the companies_list_earliest_timestamp_dict
+    Earliest_Timestamps_top_40_tech_companies_hourly  = load_Earliest_Timestamps_top_40_tech_companies_hourly(
+        where_the_code_runs = where_the_code_runs,
+    )
+
+    # getting the min date
+    min_start_date = five_thousand_days_data_df['date'].min()  # 2006-05-01 00:00:00
+    min_start_date_plus_five_thousand_hours = pd.to_datetime('2006-11-25')
+    print(min_start_date)
+
+    # getting the names of the 40 companies from the pickled file
+    top_40_tech_names = load_top_40_tech_companies_names(where_the_code_runs)
+    current_start_date = pd.to_datetime(min_start_date)
+    five_thousand_hourly_data = all_df_creator(top_40_tech_names, '1h',
+                                               how_many_intervals = 5000,
+                                               companies_list_earliest_timestamp_dict = Earliest_Timestamps_top_40_tech_companies_hourly,
+                                               start_date=current_start_date,
+                                               end_date=min_start_date_plus_five_thousand_hours)  # called it once, now it is saved
+
+    # selecting the right path -> local/colab
+    path_hourly_data = Access_the_file_path(where_the_code_runs = where_the_code_runs,
+                                path_local = pickle_hourly_file_path_local,
+                                path_google_colab = pickle_hourly_file_path_google_colab)
+
+    """
+    the daily df has col->'date'->2020-09-30
+    we here have a col->'datetime'-> 2026-04-02 15:30:00
+    so we have to: 
+    1. create a 'date' col in five_thousand_hourly_data_df.
+    2. put only the date in it.
+    3. pickle again, easy access.
+    """
+
+    # 1 + 2 + 3:
+    five_thousand_hourly_data['datetime'] = pd.to_datetime(five_thousand_hourly_data['datetime'])
+    five_thousand_hourly_data['date'] = five_thousand_hourly_data['datetime'].dt.date
+    pickling_func(five_thousand_hourly_data, path_hourly_data) # called it once, now it is saved
+    first_five_thousand_hourly_data_df = unpickle_data(path_hourly_data)
+    print(first_five_thousand_hourly_data_df)
+
+    final_df = create_df_of_hourly_prices(df = first_five_thousand_hourly_data_df,
+                                          companies_list_earliest_timestamp_dict = Earliest_Timestamps_top_40_tech_companies_hourly
+                                          )
+
+    # # selecting the right path for the final df-> local/colab
+    # todo: fix later when this file is in the GitHub
+    path_hourly_data_final = Access_the_file_path(where_the_code_runs=where_the_code_runs,
+                                            path_local=pickle_hourly_temp_file_final_local,
+                                            path_google_colab=pickle_hourly_temp_file_final_google_colab)
+
+    pickling_func(final_df, path_hourly_data_final)  # called it once, now it is saved
+    final_five_thousand_days_of_hourly_data_df = unpickle_data(path_hourly_data_final)
+
+    print(first_five_thousand_hourly_data_df)
+    print('final_five_thousand_days_of_hourly_data_df:\n')
+    print(final_five_thousand_days_of_hourly_data_df)
+
+
+
+
+
 """
-Getting the hourly prices data for the last 5000 hours 
+If we want to change the  
 """
-# 5000 is the max number of Requests
-# in this df there is the all the rows
-min_start_date = five_thousand_days_data_df['date'].min()  # 2006-05-01 00:00:00
-min_start_date_plus_five_thousand_hours = pd.to_datetime('2006-11-25')
-print(min_start_date)
-current_start_date = pd.to_datetime(min_start_date)
-five_thousand_hourly_data = all_df_creator(top_40_tech_names, '1h',
-                                            5000, start_date=current_start_date,
-                                            end_date=min_start_date_plus_five_thousand_hours)  # called it once, now it is saved
-
-# this is for temp files
-pickle_hourly_temp_file_final = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_hourly_final_data.pkl"
-
-# pickling the data for future use
-pickle_hourly_file_path = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_hourly_data.pkl"
-# this is for temp files
-pickle_hourly_temp_file_path = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_hourly_temp_data.pkl"
-
-# run on google colab
-if (where_the_code_runs == 2):
-    pickle_hourly_temp_file_path = r"/content/algo_trading_stocks/data/five_thousand_hourly_temp_data.pkl"
-    pickle_hourly_file_path = r"five_thousand_hourly_data.pkl"
-
-"""
-the daily df has col->'date'->2020-09-30
-we here have a col->'datetime'-> 2026-04-02 15:30:00
-so we have to: 
-1. create a 'date' col in five_thousand_hourly_data_df.
-2. put only the date in it.
-3. pickle again, easy access.
-"""
-
-# 1 + 2 + 3:
-# five_thousand_hourly_data['datetime'] = pd.to_datetime(five_thousand_hourly_data['datetime'])
-# five_thousand_hourly_data['date'] = five_thousand_hourly_data['datetime'].dt.date
-# pickling_func(five_thousand_hourly_data, pickle_hourly_file_path) # called it once, now it is saved
-first_five_thousand_hourly_data_df = unpickle_data(pickle_hourly_file_path)
-print(first_five_thousand_hourly_data_df)
-
-final_df = create_df_of_hourly_prices(first_five_thousand_hourly_data_df)
-
-pickling_func(final_df, pickle_hourly_file_path)  # called it once, now it is saved
-final_five_thousand_days_of_hourly_data_df = unpickle_data(pickle_hourly_file_path)
-
-print(first_five_thousand_hourly_data_df)
-print('final_five_thousand_days_of_hourly_data_df:\n')
-print(final_five_thousand_days_of_hourly_data_df)
-
-
-
-
-
-
-
-
-
+if __name__ == '__main__':
+    main()
 
 
 

@@ -5,11 +5,9 @@ from typing import Any, Tuple, Dict
 from sklearn.metrics import zero_one_loss
 import numpy as np
 from numpy import floating
-from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import MinMaxScaler
 import matplotlib.pyplot as plt
 
-import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, root_mean_squared_error
 from datetime import datetime, timedelta, date
@@ -20,11 +18,24 @@ from models.model_base import Model
 from models.ml_models import XGBoostModel, LinearRegressionModel
 from models.neural_network_models import FullyConnectedNeuralNetwork
 import pandas as pd
-from data_preparing import (pickle_file_path,unpickle_data, experiment_pickle_file_path, min_date_all_symbols_have,
-                            max_date, relative_field_x_days, experiment_train_and_validation_pickle_file_path, 
-                            experiment_test_pickle_file_path, data_split_to_train_and_validation)
-from runtime_config import where_the_code_runs
 
+
+# delete later
+from data_preparing import (unpickle_data, Access_the_file_path,
+                            tech_40_path_local, tech_40_path_google_colab,
+                            pickle_file_path_top_40_tech_names_local, pickle_file_path_top_40_tech_names_google_colab,
+                            pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies_local, pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies_google_colab,
+                            pickle_file_path_Earliest_Timestamps_hourly_top_40_teach_companies_local, pickle_file_path_Earliest_Timestamps_hourly_top_40_teach_companies_google_colab,
+                            pickle_five_thousand_days_data_file_path_local, pickle_five_thousand_days_data_file_path_google_colab,
+                            experiment_pickle_file_path_local, experiment_pickle_file_path_google_colab,
+                            experiment_train_and_validation_pickle_file_path_local, experiment_train_and_validation_pickle_file_path_google_colab,
+                            experiment_test_pickle_file_path_local, experiment_test_pickle_file_path_google_colab,
+                            data_split_to_train_and_validation,
+                            load_five_thousand_days_data_experiment_df,
+                            load_data_experiment_train_and_validation_df
+                            )
+from runtime_config import get_where_the_code_runs
+# delete later
 
 """
 We write the code with 'if __name__ == "__main__":', so all the class + def we'll keep
@@ -45,6 +56,14 @@ All the rest -> not inside the block.
 
 # todo: something looks off -> 1. linear regression bought and sold but no there was no different in the money.
 # todo: the XGBoost used to make money, now losses?
+# todo: change the way the FNN works: need to think how does this work with the
+#  batch size, we train on all the stock for the first x days? what is the batch idea.
+#  if so see the shuffle = false and the data is organized by data
+#  1. train on [start,end]
+#  2. predict the d+1 return
+#  3. use the weights we found.
+#  4. put the end+1 day in it and predict the end+2 return.
+#  5. update by backpropogation.
 """
 We may add more fields to the table.
 We use regression because we predict the price -> continuous.
@@ -60,6 +79,9 @@ We moved to object oriented programming.
 
 # todo: you can move this to an enum class
 # todo: update this each time you add a new model
+# todo: Add new models LSTM...
+# todo: Do the FCNN such that newer dates have a bigger impact on the weights.
+
 # a dict of the relevant_models_numbers_for_x_scaling -> update each time we add a new relevant model.
 # flag == 0 -> dumb model: no scaling ,
 # flag == 1 -> XGBoost model: no scaling
@@ -80,8 +102,6 @@ relevant_models_and_numbers_dict_for_scaling = {4:'Linear_regression', 5: 'Fully
 validation_types_dict = {1: 'RMSE', 2: "right_direction",
                          3: "right_direction_over_threshold"}
 
-
-
 # create a model to use on all the functions -> OOP
 """
 we will create a global array of the flags of the models
@@ -89,7 +109,7 @@ we will create a global array of the flags of the models
 
 array_of_flags_of_models = [0,1,2,3,4,5]
 def get_model(flag: int, num_of_days: int | None = None,
-              relevant_col_name: str = "daily_return_percentage",
+              relevant_col_name: str = "ret_1",
               num_of_x_fields: int | None = None) -> Model:
     """
     Factory method for selecting a model based on flag.
@@ -197,7 +217,7 @@ We will see if the RMSE of the XGBoost tree is smaller. (smaller == better).
 #     # taking the daily return
 #     last_day_returns = (
 #         train_set[train_set["date"] == last_train_date]
-#         .set_index("symbol")["daily_return_percentage"]
+#         .set_index("symbol")["ret_1"]
 #     )
 #
 #     y_pred = validation_set["symbol"].map(last_day_returns).to_numpy()
@@ -209,7 +229,7 @@ We will see if the RMSE of the XGBoost tree is smaller. (smaller == better).
 #     train_set: pd.DataFrame,
 #     validation_set: pd.DataFrame,
 #     num_of_days: int,
-#     relevant_col_name: str = "daily_return_percentage"
+#     relevant_col_name: str = "ret_1"
 # ) -> np.ndarray:
 #    """
 #     Return a np.ndarray of avg daily_return
@@ -508,6 +528,7 @@ def model_simulation(
 # this function is a wrapper function that runs the simulation
 # The only model that need the num_of_days field is the RollingAvgModel,
 # and he receives it in the __init__.
+# todo: The FCNN needs to be fixed.
 def run_model_simulation_backvalidation(
     df: pd.DataFrame,
     feature_cols_x: list[str],
@@ -525,18 +546,23 @@ def run_model_simulation_backvalidation(
     """
     Run an expanding-window test using model_simulation().
 
-    :param df:
-    :param feature_cols_x:
-    :param target_col:
-    :param start_date_train_window:
-    :param end_date_train_window:
-    :param model:
-    :param price_col:
+    The training of the FCNN must be diffrent:
+    1. train of first x days.
+    2. scale on them ONCE and never scale again.
+    3. use the existing model and each day tune the weights
+       to min the loss on the next day.
+    :param df: The df we work on.
+    :param feature_cols_x: The fields we train our models on.
+    :param target_col: The field we try to predict.
+    :param start_date_train_window: Start date of the training section.
+    :param end_date_train_window: End date of the training section.
+    :param model: The model we want to test.
+    :param price_col: The price col.
     :param initial_cash: The cash in USD we start with.
-    :param min_y_pred_to_buy:
-    :param max_y_pred_to_sell:
+    :param min_y_pred_to_buy: A threshold value to exceed in order to buy the stock.
+    :param max_y_pred_to_sell: A threshold value to be inferior to in order to buy the stock.
     :param transaction_fee: The transaction fee per stock.
-    :param max_spending_for_a_day: A limit we decide to not go over.
+    :param max_spending_for_a_day: A limit of money we can spend in a day we decide to not go over.
     :return:
     - final money made/lost
     - final percent made/lost
@@ -585,129 +611,136 @@ def run_model_simulation_backvalidation(
     number_of_buys = 0
     number_of_sells = 0
 
-    # not all the stocks have the max_date because of the train_val, test split
-    # some have one day less, so we do current_validation_date < max_date
-    while current_validation_date <= max_date:
-        next_dates = trading_dates[trading_dates > current_validation_date]
-        if next_dates.empty:
-            break
-
-        next_trade_date = pd.to_datetime(next_dates.iloc[0]).normalize()
-
-        train_set, validation_set = data_split_to_train_and_validation(
-            og_df,
-            start_date_train_window,
-            current_validation_date
+    # different approach for the FullyConnectedNeuralNetwork
+    # todo: fix the part in the fix
+    if isinstance(model, FullyConnectedNeuralNetwork):
+        raise NotImplementedError(
+            "FCNN simulation update logic is not implemented yet."
         )
+    else:
+        # not all the stocks have the max_date because of the train_val, test split
+        # some have one day less, so we do current_validation_date < max_date
+        while current_validation_date <= max_date:
+            next_dates = trading_dates[trading_dates > current_validation_date]
+            if next_dates.empty:
+                break
 
-        if train_set.empty or validation_set.empty:
+            next_trade_date = pd.to_datetime(next_dates.iloc[0]).normalize()
+
+            train_set, validation_set = data_split_to_train_and_validation(
+                og_df,
+                start_date_train_window,
+                current_validation_date
+            )
+
+            if train_set.empty or validation_set.empty:
+                current_validation_date = next_trade_date
+                continue
+
+            x_train = train_set[feature_cols_x]
+            y_train = train_set[target_col]
+            x_validation = validation_set[feature_cols_x]
+            y_validation = validation_set[target_col]
+
+            # OOP -> the model is a var we get.
+            # all the models that have more fields in the fit/predict function, they receive them
+            # in the creation of the model itself, so it is fine you don't see them here
+
+            # the x_train, y_train are only in the [Start date of the window,end date of the window] days,
+            # so we can, and should scale the x_train, for the relevant models, and it won't create a leakage.
+            # same logic for the validation set for the reset of the dates.
+            # scaling doesn't really hurt a Model, and since we haven't got a flag here, and it is not to
+            # time-consuming, we just scale for every model on the dates of the window.
+            scaler = MinMaxScaler()
+            x_train_scaled = pd.DataFrame(
+                scaler.fit_transform(x_train),
+                columns=x_train.columns,
+                index=x_train.index
+            )
+            x_validation_scaled = pd.DataFrame(
+                scaler.transform(x_validation),
+                columns=x_validation.columns,
+                index=x_validation.index
+            )
+
+            # we don't scale the y/target col.
+            model.fit(x_train_scaled, y_train)
+            y_pred = model.predict(
+                x_test=x_validation_scaled,
+                train_set=train_set,
+                val_set=validation_set
+            )
+
+
+            stock_names = validation_set["symbol"].tolist()
+            current_positions = positions_dict_to_list(positions_dict, stock_names)
+
+            today_prices = validation_set[price_col].to_numpy(dtype=float)
+
+            next_day_df = og_df.loc[
+                og_df["date"] == next_trade_date,
+                ["symbol", price_col]
+            ].copy()
+
+            next_day_price_map = dict(zip(next_day_df["symbol"], next_day_df[price_col]))
+
+            missing_symbols = [name for name in stock_names if name not in next_day_price_map]
+            if missing_symbols:
+
+                raise ValueError(f"Missing next-day prices for symbols: {missing_symbols} " # 2025-05-19 for <= and for <
+                                 f"in date: {current_validation_date}") #
+
+            next_day_prices = np.array(
+                [float(next_day_price_map[name]) for name in stock_names],
+                dtype=float
+            )
+
+            (positions_dict, cash, money_made_lost_step, portfolio_value_next_day,
+             number_of_buys, number_of_sells) = model_simulation(
+                current_positions=current_positions,
+                y_pred=y_pred,
+                stocks_prices=today_prices,
+                next_day_prices=next_day_prices,
+                stocks_names=stock_names,
+                action_strategy=1,
+                number_of_buys = number_of_buys,
+                number_of_sells = number_of_sells,
+                min_y_pred_to_buy=min_y_pred_to_buy,
+                max_y_pred_to_sell=max_y_pred_to_sell,
+                money_in_our_possession_now=cash,
+                transaction_fee=transaction_fee,
+                max_spending_for_a_day=max_spending_for_a_day
+            )
+
+            percent_made_lost_step = (
+                (portfolio_value_next_day - initial_cash) / initial_cash * 100
+                if initial_cash != 0 else 0.0
+            )
+
+            history_rows.append({
+                "validation_date": current_validation_date,
+                "next_trade_date": next_trade_date,
+                "cash": float(cash),
+                "portfolio_value_next_day": float(portfolio_value_next_day),
+                "money_made_lost_step": float(money_made_lost_step),
+                "percent_made_lost_total": float(percent_made_lost_step),
+            })
+
             current_validation_date = next_trade_date
-            continue
 
-        x_train = train_set[feature_cols_x]
-        y_train = train_set[target_col]
-        x_validation = validation_set[feature_cols_x]
-        y_validation = validation_set[target_col]
+        history_df = pd.DataFrame(history_rows)
 
-        # OOP -> the model is a var we get.
-        # all the models that have more fields in the fit/predict function, they receive them
-        # in the creation of the model itself, so it is fine you don't see them here
+        if history_df.empty:
+            return 0.0, 0.0, history_df, number_of_buys, number_of_sells
 
-        # the x_train, y_train are only in the [Start date of the window,end date of the window] days,
-        # so we can, and should scale the x_train, for the relevant models, and it won't create a leakage.
-        # same logic for the validation set for the reset of the dates.
-        # scaling doesn't really hurt a Model, and since we haven't got a flag here, and it is not to
-        # time-consuming, we just scale for every model on the dates of the window.
-        scaler = MinMaxScaler()
-        x_train_scaled = pd.DataFrame(
-            scaler.fit_transform(x_train),
-            columns=x_train.columns,
-            index=x_train.index
-        )
-        x_validation_scaled = pd.DataFrame(
-            scaler.transform(x_validation),
-            columns=x_validation.columns,
-            index=x_validation.index
-        )
-
-        # we don't scale the y/target col.
-        model.fit(x_train_scaled, y_train)
-        y_pred = model.predict(
-            x_test=x_validation_scaled,
-            train_set=train_set,
-            val_set=validation_set
-        )
-
-
-        stock_names = validation_set["symbol"].tolist()
-        current_positions = positions_dict_to_list(positions_dict, stock_names)
-
-        today_prices = validation_set[price_col].to_numpy(dtype=float)
-
-        next_day_df = og_df.loc[
-            og_df["date"] == next_trade_date,
-            ["symbol", price_col]
-        ].copy()
-
-        next_day_price_map = dict(zip(next_day_df["symbol"], next_day_df[price_col]))
-
-        missing_symbols = [name for name in stock_names if name not in next_day_price_map]
-        if missing_symbols:
-
-            raise ValueError(f"Missing next-day prices for symbols: {missing_symbols} " # 2025-05-19 for <= and for <
-                             f"in date: {current_validation_date}") #
-
-        next_day_prices = np.array(
-            [float(next_day_price_map[name]) for name in stock_names],
-            dtype=float
-        )
-
-        (positions_dict, cash, money_made_lost_step, portfolio_value_next_day,
-         number_of_buys, number_of_sells) = model_simulation(
-            current_positions=current_positions,
-            y_pred=y_pred,
-            stocks_prices=today_prices,
-            next_day_prices=next_day_prices,
-            stocks_names=stock_names,
-            action_strategy=1,
-            number_of_buys = number_of_buys,
-            number_of_sells = number_of_sells,
-            min_y_pred_to_buy=min_y_pred_to_buy,
-            max_y_pred_to_sell=max_y_pred_to_sell,
-            money_in_our_possession_now=cash,
-            transaction_fee=transaction_fee,
-            max_spending_for_a_day=max_spending_for_a_day
-        )
-
-        percent_made_lost_step = (
-            (portfolio_value_next_day - initial_cash) / initial_cash * 100
+        final_portfolio_value = float(history_df["portfolio_value_next_day"].iloc[-1])
+        final_money_made_lost = final_portfolio_value - float(initial_cash)
+        final_percent_made_lost = (
+            (final_money_made_lost / float(initial_cash)) * 100
             if initial_cash != 0 else 0.0
         )
 
-        history_rows.append({
-            "validation_date": current_validation_date,
-            "next_trade_date": next_trade_date,
-            "cash": float(cash),
-            "portfolio_value_next_day": float(portfolio_value_next_day),
-            "money_made_lost_step": float(money_made_lost_step),
-            "percent_made_lost_total": float(percent_made_lost_step),
-        })
-
-        current_validation_date = next_trade_date
-
-    history_df = pd.DataFrame(history_rows)
-
-    if history_df.empty:
-        return 0.0, 0.0, history_df, number_of_buys, number_of_sells
-
-    final_portfolio_value = float(history_df["portfolio_value_next_day"].iloc[-1])
-    final_money_made_lost = final_portfolio_value - float(initial_cash)
-    final_percent_made_lost = (
-        (final_money_made_lost / float(initial_cash)) * 100
-        if initial_cash != 0 else 0.0
-    )
-
-    return final_money_made_lost, final_percent_made_lost, history_df, number_of_buys, number_of_sells
+        return final_money_made_lost, final_percent_made_lost, history_df, number_of_buys, number_of_sells
 
 
 
@@ -967,7 +1000,7 @@ def model_Expending_window_eval(
         y_validation = validation_set[target_col]
 
         # this is like dumb model -> flag == 0
-        relevant_col_name = 'daily_return_percentage'
+        relevant_col_name = 'ret_1'
 
         num_of_x_fields = len(feature_cols_x)
         # creating the model -> OOP
@@ -1371,10 +1404,15 @@ def test_type_models_to_compare():
 Inside this block we write all the code that we want to execute each time we run the code.
 """
 if __name__ == "__main__":
-    data_experiment_train_and_validation_df = unpickle_data(experiment_train_and_validation_pickle_file_path)
+    # where we run the code
+    where_the_code_runs = get_where_the_code_runs()
+
+    # selecting the right path based on where the code runs
+    # unpickle the data in the path
+    data_experiment_train_and_validation_df = load_data_experiment_train_and_validation_df(where_the_code_runs = where_the_code_runs,)
     data_experiment_train_and_validation_df = data_experiment_train_and_validation_df.loc[:, ~data_experiment_train_and_validation_df.columns.duplicated()].copy()
 
-    # a part to check there is no data leakage
+    # todo: a part to check there is no data leakage
     df_check = data_experiment_train_and_validation_df.copy()
     df_check["date"] = pd.to_datetime(df_check["date"])
     df_check = df_check.sort_values(["symbol", "date"]).reset_index(drop=True)
@@ -1391,7 +1429,7 @@ if __name__ == "__main__":
 
     print("Matches same-day target:",
           np.isclose(
-              df_check["daily_return_percentage"],
+              df_check["ret_1"],
               df_check["same_day_return_check"],
               equal_nan=True
           ).mean())
@@ -1446,7 +1484,7 @@ if __name__ == "__main__":
         target_col="next_day_return",
         start_date_train_window=initial_train_start,
         end_date_train_window=initial_train_end,
-        model=get_model(flag=1, relevant_col_name="daily_return_percentage"),  # XGBoost
+        model=get_model(flag=1, relevant_col_name="ret_1"),  # XGBoost
         price_col="close",
         initial_cash=10_000.0,
         min_y_pred_to_buy=0.02,
@@ -1465,7 +1503,7 @@ if __name__ == "__main__":
     #     target_col="next_day_return",
     #     start_date_train_window=initial_train_start,
     #     end_date_train_window=initial_train_end,
-    #     model=get_model(flag = 2, relevant_col_name = "daily_return_percentage"),  # previous_daily_return
+    #     model=get_model(flag = 2, relevant_col_name = "ret_1"),  # previous_daily_return
     #     price_col="close",
     #     initial_cash=10_000.0,
     #     min_y_pred_to_buy=0.02,
@@ -1484,7 +1522,7 @@ if __name__ == "__main__":
     #     target_col="next_day_return",
     #     start_date_train_window=initial_train_start,
     #     end_date_train_window=initial_train_end,
-    #     model=get_model(flag = 3,num_of_days=5, relevant_col_name="daily_return_percentage"),  # rolling_avg_baseline
+    #     model=get_model(flag = 3,num_of_days=5, relevant_col_name="ret_1"),  # rolling_avg_baseline
     #     price_col="close",
     #     initial_cash=10_000.0,
     #     min_y_pred_to_buy=0.02,
@@ -1494,36 +1532,16 @@ if __name__ == "__main__":
     # )
 
     # Linear_Regression
-    # (money_made_lost_Linear_Regression,
-    #  percent_made_lost_Linear_Regression,
-    #  history_df_Linear_Regression, number_of_buys_Linear_Regression,
-    #  number_of_sells_Linear_Regression) = run_model_simulation_backvalidation(
-    #     df=data_experiment_train_and_validation_df,
-    #     feature_cols_x=feature_cols_x,
-    #     target_col="next_day_return",
-    #     start_date_train_window=initial_train_start,
-    #     end_date_train_window=initial_train_end,
-    #     model=get_model(flag = 4, relevant_col_name = "daily_return_percentage"),  # Linear Regression
-    #     price_col="close",
-    #     initial_cash=10_000.0,
-    #     min_y_pred_to_buy=0.02,
-    #     max_y_pred_to_sell=-0.02,
-    #     transaction_fee=0.0,
-    #     max_spending_for_a_day=3_000.0
-    # )
-
-    # FullyConnectedNeuralNetwork
-    (money_made_lost_FullyConnectedNeuralNetwork,
-     percent_made_lost_FullyConnectedNeuralNetwork,
-     history_df_FullyConnectedNeuralNetwork, number_of_buys_FullyConnectedNeuralNetwork,
-     number_of_sells_FullyConnectedNeuralNetwork) = run_model_simulation_backvalidation(
+    (money_made_lost_Linear_Regression,
+     percent_made_lost_Linear_Regression,
+     history_df_Linear_Regression, number_of_buys_Linear_Regression,
+     number_of_sells_Linear_Regression) = run_model_simulation_backvalidation(
         df=data_experiment_train_and_validation_df,
         feature_cols_x=feature_cols_x,
         target_col="next_day_return",
         start_date_train_window=initial_train_start,
         end_date_train_window=initial_train_end,
-        model=get_model(flag=5,
-                        num_of_x_fields=len(feature_cols_x)),  # FullyConnectedNeuralNetwork
+        model=get_model(flag = 4, relevant_col_name = "ret_1"),  # Linear Regression
         price_col="close",
         initial_cash=10_000.0,
         min_y_pred_to_buy=0.02,
@@ -1532,13 +1550,36 @@ if __name__ == "__main__":
         max_spending_for_a_day=3_000.0
     )
 
+    # todo: with the new idea of how to train the FNN, this
+    #  FNN is not the same. need to save the model we did in model_eval and call it here.
+    # FullyConnectedNeuralNetwork
+    # (money_made_lost_FullyConnectedNeuralNetwork,
+    #  percent_made_lost_FullyConnectedNeuralNetwork,
+    #  history_df_FullyConnectedNeuralNetwork, number_of_buys_FullyConnectedNeuralNetwork,
+    #  number_of_sells_FullyConnectedNeuralNetwork) = run_model_simulation_backvalidation(
+    #     df=data_experiment_train_and_validation_df,
+    #     feature_cols_x=feature_cols_x,
+    #     target_col="next_day_return",
+    #     start_date_train_window=initial_train_start,
+    #     end_date_train_window=initial_train_end,
+    #     model=get_model(flag=5,
+    #     num_of_x_fields=len(feature_cols_x)),  # FullyConnectedNeuralNetwork
+    #     price_col="close",
+    #     initial_cash=10_000.0,
+    #     min_y_pred_to_buy=0.02,
+    #     max_y_pred_to_sell=-0.02,
+    #     transaction_fee=0.0,
+    #     max_spending_for_a_day=3_000.0
+    # )
+
+
     money_made_comparison('XGBoost', money_made_lost_XGBoost,percent_made_lost_XGBoost,
                           number_of_buys_XGBoost, number_of_sells_XGBoost,
                           history_df_XGBoost,
-                          'Linear regression',money_made_lost_FullyConnectedNeuralNetwork,
-                          percent_made_lost_FullyConnectedNeuralNetwork,
-                          number_of_buys_FullyConnectedNeuralNetwork, number_of_sells_FullyConnectedNeuralNetwork,
-                          history_df_FullyConnectedNeuralNetwork)
+                          'Linear Regression',money_made_lost_Linear_Regression,
+                          percent_made_lost_Linear_Regression,
+                          number_of_buys_Linear_Regression, number_of_sells_Linear_Regression,
+                          history_df_Linear_Regression)
 
     # money_made_comparison('rolling_avg_baseline', money_made_lost_rolling_avg_baseline,
     #                       percent_made_lost_rolling_avg_baseline,
@@ -1574,7 +1615,7 @@ if __name__ == "__main__":
     flag=1,  # XGBoost
     price_col="close",
     num_of_days=None,
-    relevant_col_name="daily_return_percentage",
+    relevant_col_name="ret_1",
     initial_cash=10_000.0,
     min_y_pred_to_buy=0.02,
     max_y_pred_to_sell=-0.02,
@@ -1648,4 +1689,49 @@ previous_daily_return made more money.
 
 
 LOOKS LIKE rolling_avg_baseline IS THE BEST!!!!!!!!
+
+XGBoost_model is better than FullyConnectedNeuralNetwork:
+AVG % right direction: 52.47933884297521 < 51.52892561983471
+
+Money made/lost XGBoost: 926.580179999999
+Percent made/lost: XGBoost 9.26580179999999
+amount of stocks bought XGBoost: 340
+amount of stocks sold XGBoost: 54
+    validation_date next_trade_date  cash  portfolio_value_next_day  \
+115      2025-05-12      2025-05-13  3.94               10724.05970   
+116      2025-05-13      2025-05-14  3.94               10844.92000   
+117      2025-05-14      2025-05-15  3.94               10826.00000   
+118      2025-05-15      2025-05-16  3.94               10971.37976   
+119      2025-05-16      2025-05-19  3.94               10926.58018   
+
+     money_made_lost_step  percent_made_lost_total  
+115             240.87970                 7.240597  
+116             120.86030                 8.449200  
+117             -18.92000                 8.260000  
+118             145.37976                 9.713798  
+119             -44.79958                 9.265802  
+number of trading days for both models:XGBoost: 120 ,Linear regression: 120
+Money made/lost Linear regression: 755.7298599999995
+Percent made/lost: Linear regression 7.557298599999996
+amount of stocks bought Linear regression: 77
+amount of stocks sold Linear regression: 35
+    validation_date next_trade_date        cash  portfolio_value_next_day  \
+115      2025-05-12      2025-05-13  1069.26986               10830.90986   
+116      2025-05-13      2025-05-14  1069.26986               10818.30986   
+117      2025-05-14      2025-05-15  1069.26986               10840.14986   
+118      2025-05-15      2025-05-16  1069.26986               10670.88986   
+119      2025-05-16      2025-05-19  1069.26986               10755.72986   
+
+     money_made_lost_step  percent_made_lost_total  
+115                455.28                 8.309099  
+116                -12.60                 8.183099  
+117                 21.84                 8.401499  
+118               -169.26                 6.708899  
+119                 84.84                 7.557299  
+number of trading days Linear regression: 120
+XGBoost made more money.
 """
+
+
+
+

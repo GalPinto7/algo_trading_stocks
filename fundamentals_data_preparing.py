@@ -3,15 +3,11 @@
 # regulr password
 
 import pandas as pd
-from pathlib import Path
-import matplotlib.pyplot as plt
-import numpy as np
-import sklearn.linear_model
 import requests
-from twelvedata import TDClient
-import time
-import pickle
-from data_preparing import df_top_40_tech_companies, top_40_tech_names, Twelve_data_API_key, td
+
+from data_preparing import load_top_40_tech_companies_names
+from twelve_data_api import Twelve_data_API_key
+from runtime_config import get_where_the_code_runs
 
 
 """
@@ -71,8 +67,6 @@ def select_relevant_fields(symbols, relevant_fields):
             # data.get(field) returns None if the field doesn't exist
             selected_data[field] = data.get(field)
 
-        # Add the symbol to the data so you know which row is which
-        selected_data['symbol'] = sym
         all_companies.append(selected_data)
 
     # Create the DataFrame once from the list of dictionaries
@@ -80,10 +74,21 @@ def select_relevant_fields(symbols, relevant_fields):
     return df
 
 
-# Example usage:
-my_fields = ['symbol', 'sector', 'industry']
-symbols_list = ['AAPL', 'MSFT', 'GOOGL']
 
-df_results = select_relevant_fields(top_40_tech_names, my_fields)
-print(df_results)
+def main() -> None:
+    where_the_code_runs = get_where_the_code_runs()
+
+    # Example usage:
+    my_fields = ['symbol', 'sector', 'industry']
+    # symbols_list = ['AAPL', 'MSFT', 'GOOGL']
+
+    top_40_tech_names = load_top_40_tech_companies_names(where_the_code_runs)
+    df_results = select_relevant_fields(top_40_tech_names, my_fields)
+    print(df_results)
+
+
+if __name__ == '__main__':
+    main()
+
+
 

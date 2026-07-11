@@ -5,6 +5,7 @@ import numpy as np
 from typing import Optional
 from typing import Any
 
+
 """
 This is an abstract base class and should not be used directly.
 It is the definition of a model and the function it has.

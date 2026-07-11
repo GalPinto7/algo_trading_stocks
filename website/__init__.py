@@ -1,0 +1,27 @@
+"""
+set up the application. Again, the init.py file will run
+automatically when we import anything from the website package.
+"""
+
+# todo: we used relative paths -> fix for google colab
+from flask import Flask
+
+
+def create_app():
+    """
+    This function creates a flask website.
+    :return: This returns the configured Flask app object, so it can be used elsewhere
+    """
+    app = Flask(__name__)
+    # Secret key to secure sessions and cookies.
+    # It can be any random string, but it must be kept secret.
+    # todo: change later so won't be hard coded.
+    app.config['SECRET_KEY'] = 'write something later'
+
+    from .views import views
+
+    # Register the blueprints with the Flask app
+    # You can specify a URL prefix for each blueprint if you want.
+    app.register_blueprint(views, url_prefix='/')
+
+    return app

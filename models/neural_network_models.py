@@ -11,6 +11,7 @@ import xgboost as xgb
 from sklearn.linear_model import LinearRegression
 from models.model_base import Model
 
+
 """
 We will write here the NN models classes.
 1. 
@@ -22,7 +23,7 @@ We will write here the NN models classes.
 # todo: features scaling !!!!!!
 #  is it relevant for the all the NN models? ML models?
 class FullyConnectedNeuralNetwork(Model):
-    # todo: think about regularizer
+    # todo: think about regularize
     def __init__(self, num_of_fields: int, number_of_layers: int | None = 3,
                  number_of_neurons_in_the_first_layer: int | None = 64,activation_function: str = 'relu',
                  probability_flag: int | None = 0, dived_num_of_neurons_by_each_layer: int | None = 2,
@@ -34,6 +35,13 @@ class FullyConnectedNeuralNetwork(Model):
         There are 2, fit and predict, we have to create them with the same signature.
         All the fields that are not in them but we need, we will create as a property of an obj in our class.
         These fields: epochs,batch_size, verbose
+
+        The training is like this:
+        1. splits the data to batch_size rows in each chunk.
+        2. take a chunk.
+        3. forward the data to predict the d+1 return.
+        4. backpropagation.
+        5. does this epochs times.
         :param num_of_fields: The number of fields.
         :param number_of_layers: The number of layers we want the NN to have.
         :param number_of_neurons_in_the_first_layer: The number of neurons in the first layer.
