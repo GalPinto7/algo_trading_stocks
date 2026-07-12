@@ -46,6 +46,51 @@ def test_status_page(client):
     assert data["status"] == "OK"
 
 
+def test_api_status(client):
+    """
+    Checks that the JSON API health endpoint is registered and working.
+    """
+    response = client.get("/api/status")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["service"] == "stock-return-prediction"
+    assert data["status"] == "ok"
+    assert data["version"] == "1.0"
+
+
+# todo: need to update this if the models change
+def test_api_models(client):
+    """
+
+    :param client:
+    :return:
+    """
+    response = client.get("/api/models")
+    assert response.status_code == 200
+    data = response.get_json()
+
+    # check we got the flags and models
+    # Check that this exact dictionary exists inside the list data["models"].
+    assert {"flag": 0, "name": "Dumb baseline"} in data["models"]
+    assert {"flag": 1, "name": "XGBoost"} in data["models"]
+    assert {"flag": 2, "name": "Previous day return baseline"} in data["models"]
+    assert {"flag": 3, "name": "Rolling average baseline"} in data["models"]
+    assert {"flag": 4, "name": "Linear regression"} in data["models"]
+    assert {"flag": 5, "name": "Fully connected neural network"} in data["models"]
+
+def test_api_datasets(client):
+    """
+    Checks that the API exposes dataset metadata without loading the datasets.
+    """
+    response = client.get("/api/datasets")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert "data_dir" in data
+    assert "file_count" in data
+    assert "files" in data
+
 
 
 

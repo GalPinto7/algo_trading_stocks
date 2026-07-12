@@ -80,6 +80,71 @@ http://127.0.0.1:5000
 pytest
 ```
 
+### API Endpoints
+
+The Flask app also exposes a small JSON API for developer tooling and future UI work:
+
+```text
+GET /api/status
+GET /api/models
+GET /api/datasets
+```
+
+#### `GET /api/status`
+
+Checks that the API is alive and that the API routes are registered correctly.
+
+Example response:
+
+```json
+{
+  "service": "stock-return-prediction",
+  "status": "ok",
+  "version": "1.0"
+}
+```
+
+#### `GET /api/models`
+
+Lists the model flags supported by the project. This is useful for future UI pages or tools because they can discover model options without reading the Python source code.
+
+Example response:
+
+```json
+{
+  "models": [
+    {
+      "flag": 0,
+      "name": "Dumb baseline"
+    },
+    {
+      "flag": 1,
+      "name": "XGBoost"
+    }
+  ]
+}
+```
+
+#### `GET /api/datasets`
+
+Lists local data artifacts without loading large files into memory. This is useful for developer tooling because it helps developers see which data files exist.
+
+Example response:
+
+```json
+{
+  "data_dir": "path/to/project/data",
+  "file_count": 3,
+  "files": [
+    {
+      "name": "tech_universe.csv",
+      "type": "csv",
+      "size_bytes": 1234
+    }
+  ]
+}
+```
+
 ### Notes
 
 - The project uses Twelve Data for stock-market data.

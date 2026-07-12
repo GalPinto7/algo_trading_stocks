@@ -3,9 +3,13 @@ set up the application. Again, the init.py file will run
 automatically when we import anything from the website package.
 """
 
-# todo: we used relative paths -> fix for google colab
+# todo: fix this 1
 from flask import Flask
 import os
+# Imports the existing HTML page routes and API routes.
+from .views import views
+from .api_routes import api
+
 
 
 def create_app():
@@ -20,9 +24,11 @@ def create_app():
     app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "dev-only-secret")
 
     from .views import views
+    from .api_routes import api
 
     # Register the blueprints with the Flask app
     # You can specify a URL prefix for each blueprint if you want.
     app.register_blueprint(views, url_prefix='/')
+    app.register_blueprint(api)
 
     return app
