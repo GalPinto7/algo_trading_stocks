@@ -6,7 +6,7 @@ To handles all the API calls logic to the "twelve data" website.
 # email
 # regulr password
 from __future__ import annotations
-
+import os
 import time
 import requests
 import pandas as pd
@@ -20,11 +20,32 @@ after that we just pickle the data in a file and then
 just call it -> FOR THE START DATA ONLY!!!
 """
 
-# todo: write the API key in a different place
-Twelve_data_API_key = '8b8436f89bc649d1921065d6bfca8c60'
+# this is the TD client.
+# we will use lazy initialization here, so we
+# don't call the API each time we import this file.
+td = None
 
-# Initialize client with your API key
-td = TDClient(apikey=Twelve_data_API_key)
+
+def get_api_key() -> str:
+    """
+
+    :return:
+    """
+    api_key = os.getenv("TWELVE_DATA_API_KEY")
+    if not api_key:
+        raise RuntimeError("TWELVE_DATA_API_KEY environment variable is not set.")
+    return api_key
+
+
+def get_td_client() -> TDClient:
+    """
+
+    :return:
+    """
+    global td
+    if td is None:
+        td = TDClient(apikey=get_api_key())
+    return td
 
 # todo: this is the API doc: https://twelvedata.com/docs#ws-real-time-price, use it
 
@@ -44,7 +65,7 @@ def company_exchange_and_currency_fetcher(ticker_symbol: str):
     url = "https://api.twelvedata.com/symbol_search"
     params = {
         "symbol": ticker_symbol,
-        'API_KEY': Twelve_data_API_key
+        'API_KEY': get_api_key()
     }
 
     data = requests.get(url, params = params).json()
@@ -71,7 +92,7 @@ def company_earliest_timestamp_fetcher(ticker_symbol: str, interval: str = '1day
         f'https://api.twelvedata.com/earliest_timestamp'
         f'?symbol={ticker_symbol}'
         f'&interval={interval}'
-        f'&apikey={Twelve_data_API_key}'
+        f'&apikey={get_api_key()}'
     )
 
     data = requests.get(url).json()
@@ -126,7 +147,7 @@ def company_data_prices_fetcher(ticker_symbol: str, wanted_interval: str, how_ma
     # check that the end date is bigger than the start date (if they exist).
     if (start_date is not None) and (end_date is not None) and (start_date > end_date):
         raise ValueError("start_date must be <= end_date")
-
+    td = get_td_client()
     pands_df = td.time_series(
         symbol=ticker_symbol,
         interval=wanted_interval,

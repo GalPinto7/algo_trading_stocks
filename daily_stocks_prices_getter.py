@@ -29,15 +29,11 @@ from data_preparing import (
     load_five_thousand_days_data_df,
     add_row_of_new_df_to_og_df,
     pickling_func,
-    Access_the_file_path,
-    pickle_five_thousand_days_data_file_path_local,
-    pickle_five_thousand_days_data_file_path_google_colab,
-    pickle_five_thousand_days_data_file_path_for_testing_local,
-    pickle_five_thousand_days_data_file_path_for_testing_google_colab,
     fast_perf_x_trading_days_ago_for_last_date,
     relative_field_x_days_for_last_date,
     calculate_rolling_mean_for_x_days_for_last_date
 )
+from paths import FIVE_THOUSAND_DAYS_DATA_TESTING
 from twelve_data_api import all_df_creator
 from runtime_config import get_where_the_code_runs
 import pandas as pd
@@ -295,13 +291,9 @@ def main() -> None:
     # we need to calcukate
 
 
-    # selecting the relevant file path based on where do we run the code
     # TODO: NOTICE for now we save the new df in a new pkl file so we won't delete the old one,
     #  we do this util we are sure this code works.
-    five_thousand_days_data_df_path = Access_the_file_path(where_the_code_runs=where_the_code_runs,
-                                                           path_local=pickle_five_thousand_days_data_file_path_for_testing_local,
-                                                           path_google_colab=pickle_five_thousand_days_data_file_path_for_testing_google_colab
-                                                       )
+    five_thousand_days_data_df_path = FIVE_THOUSAND_DAYS_DATA_TESTING
 
     # Saves the new df
     pickling_func(data = five_thousand_days_data_df, file_path=five_thousand_days_data_df_path)

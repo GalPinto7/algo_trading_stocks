@@ -20,22 +20,11 @@ from models.neural_network_models import FullyConnectedNeuralNetwork
 import pandas as pd
 
 
-# delete later
-from data_preparing import (unpickle_data, Access_the_file_path,
-                            tech_40_path_local, tech_40_path_google_colab,
-                            pickle_file_path_top_40_tech_names_local, pickle_file_path_top_40_tech_names_google_colab,
-                            pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies_local, pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies_google_colab,
-                            pickle_file_path_Earliest_Timestamps_hourly_top_40_teach_companies_local, pickle_file_path_Earliest_Timestamps_hourly_top_40_teach_companies_google_colab,
-                            pickle_five_thousand_days_data_file_path_local, pickle_five_thousand_days_data_file_path_google_colab,
-                            experiment_pickle_file_path_local, experiment_pickle_file_path_google_colab,
-                            experiment_train_and_validation_pickle_file_path_local, experiment_train_and_validation_pickle_file_path_google_colab,
-                            experiment_test_pickle_file_path_local, experiment_test_pickle_file_path_google_colab,
-                            data_split_to_train_and_validation,
-                            load_five_thousand_days_data_experiment_df,
-                            load_data_experiment_train_and_validation_df
-                            )
+from data_preparing import (
+    data_split_to_train_and_validation,
+    load_data_experiment_train_and_validation_df,
+)
 from runtime_config import get_where_the_code_runs
-# delete later
 
 """
 We write the code with 'if __name__ == "__main__":', so all the class + def we'll keep

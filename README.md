@@ -8,6 +8,86 @@ The project currently uses daily OHLCV stock data, engineered technical features
 
 ---
 
+## Quick Start
+
+### Requirements
+
+- Python 3.11
+- pip
+- Git
+
+### Setup
+
+Move into the project folder:
+
+```powershell
+cd "C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026"
+```
+
+Create a virtual environment:
+
+```powershell
+python -m venv .venv
+```
+
+Activate it:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Install dependencies:
+
+```powershell
+pip install -r requirements.txt
+```
+
+### Environment Variables
+
+The project uses the Twelve Data API for market data. The API key should not be written directly in the code.
+
+Create a local `.env` file for your private values. This file should stay on your computer and should not be uploaded with real secrets.
+
+Use `.env.example` as the public template:
+
+```text
+TWELVE_DATA_API_KEY=your-twelve-data-api-key
+```
+
+For the current code, set the environment variable in PowerShell before running code that calls Twelve Data:
+
+```powershell
+$env:TWELVE_DATA_API_KEY = "your-real-api-key"
+```
+
+The `.env` file is useful as a local reference, but Python does not load it automatically unless the project later adds a package such as `python-dotenv`.
+
+### Run The Website
+
+```powershell
+python main.py
+```
+
+Then open:
+
+```text
+http://127.0.0.1:5000
+```
+
+### Run Tests
+
+```powershell
+pytest
+```
+
+### Notes
+
+- The project uses Twelve Data for stock-market data.
+- Some data is cached locally inside the `data/` folder.
+- This project is for research and learning, not real trading.
+
+---
+
 ## Project Goal
 
 The main goal is to answer this question:

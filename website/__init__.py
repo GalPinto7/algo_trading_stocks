@@ -5,6 +5,7 @@ automatically when we import anything from the website package.
 
 # todo: we used relative paths -> fix for google colab
 from flask import Flask
+import os
 
 
 def create_app():
@@ -15,8 +16,8 @@ def create_app():
     app = Flask(__name__)
     # Secret key to secure sessions and cookies.
     # It can be any random string, but it must be kept secret.
-    # todo: change later so won't be hard coded.
-    app.config['SECRET_KEY'] = 'write something later'
+    # so if SECRET_KEY is def in our env file, use it here
+    app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "dev-only-secret")
 
     from .views import views
 

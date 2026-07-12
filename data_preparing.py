@@ -4,7 +4,6 @@
 from __future__ import annotations
 from runtime_config import get_where_the_code_runs
 import pandas as pd
-from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import time
@@ -13,7 +12,17 @@ import math
 from sklearn.preprocessing import MinMaxScaler
 from datetime import datetime, timedelta, date
 
-
+from paths import (
+    TECH_UNIVERSE_CSV,
+    TOP_40_TECH_COMPANIES_NAMES,
+    FIVE_THOUSAND_DAYS_DATA,
+    FIVE_THOUSAND_DAYS_DATA_TESTING,
+    FIVE_THOUSAND_DAYS_DATA_EXPERIMENT,
+    EXPERIMENT_TRAIN_AND_VALIDATION_DATA,
+    EXPERIMENT_TEST_DATA,
+    EARLIEST_TIMESTAMPS_DAILY_TOP_40,
+    EARLIEST_TIMESTAMPS_HOURLY_TOP_40,
+)
 """
 every function with a "#tested" means we tested the function in the test_data_preparing.py and it should be fine.
 """
@@ -22,7 +31,7 @@ every function with a "#tested" means we tested the function in the test_data_pr
 import the API function.
 """
 from twelve_data_api import (
-    Twelve_data_API_key,
+    get_td_client,
     td,
     company_exchange_and_currency_fetcher,
     company_earliest_timestamp_fetcher,
@@ -105,46 +114,6 @@ predict -> next-day percent return for each stock
 
 
 
-#####################################################Paths of files#####################################################
-# tech universe csv
-tech_40_path_local = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\tech_universe.csv"
-tech_40_path_google_colab = r"/content/algo_trading_stocks/data/tech_universe.csv"
-
-# top 40 tech names pickle
-pickle_file_path_top_40_tech_names_local = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\top_40_teach_companies_names.pkl"
-pickle_file_path_top_40_tech_names_google_colab = r"/content/algo_trading_stocks/data/top_40_teach_companies_names.pkl"
-
-# Earliest_Timestamps daily pickle
-pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies_local = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\Earliest_Timestamps_daily_top_40_teach_companies_data.pkl"
-pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies_google_colab = r"/content/algo_trading_stocks/data/Earliest_Timestamps_daily_top_40_teach_companies_data.pkl"
-
-# Earliest_Timestamps hourly pickle
-pickle_file_path_Earliest_Timestamps_hourly_top_40_teach_companies_local = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\Earliest_Timestamps_hourly_top_40_teach_companies_data.pkl"
-pickle_file_path_Earliest_Timestamps_hourly_top_40_teach_companies_google_colab = r"/content/algo_trading_stocks/data/Earliest_Timestamps_hourly_top_40_teach_companies_data.pkl"
-
-# five thousand daily prices pickle
-pickle_five_thousand_days_data_file_path_local = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_days_data.pkl"
-pickle_five_thousand_days_data_file_path_google_colab = r"/content/algo_trading_stocks/data/five_thousand_days_data.pkl"
-
-# experiment full data pickle
-experiment_pickle_file_path_local = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_days_data_experiment.pkl"
-experiment_pickle_file_path_google_colab = r"/content/algo_trading_stocks/data/five_thousand_days_data_experiment.pkl"
-
-# experiment train and validation pickle
-experiment_train_and_validation_pickle_file_path_local = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\experiment_train_and_validation_data.pkl"
-experiment_train_and_validation_pickle_file_path_google_colab = r"/content/algo_trading_stocks/data/experiment_train_and_validation_data.pkl"
-
-
-# experiment test pickle
-experiment_test_pickle_file_path_local = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\experiment_test_data.pkl"
-experiment_test_pickle_file_path_google_colab = r"/content/algo_trading_stocks/data/experiment_test_data.pkl"
-
-# just for testing
-pickle_five_thousand_days_data_file_path_for_testing_local = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_days_data_testing.pkl"
-pickle_five_thousand_days_data_file_path_for_testing_google_colab = r"/content/algo_trading_stocks/data/five_thousand_days_data_testing.pkl"
-
-########################################################################################################################
-
 ############empty vars we will update later - def here so code will not crush in diffrent files how use them############
 # Safe defaults.
 # They prevent heavy file loading during import.
@@ -160,21 +129,6 @@ min_date_all_symbols_have = None
 max_date = None
 ########################################################################################################################
 
-
-def Access_the_file_path(where_the_code_runs: int, path_local: str, path_google_colab): # tested
-    """
-    Returns the relevant file path.
-    :param where_the_code_runs: 1 -> local, 2 -> google colab.
-    :param path_local: The path of the file in the local computer.
-    :param path_google_colab: The path of the file in google colab.
-    :return: The path depending on where the code runs.
-    """
-    if (where_the_code_runs == 1):
-        return path_local
-    elif (where_the_code_runs == 2):
-        return path_google_colab
-    else:
-        raise ValueError('Can select only between 1 or 2.')
 
     ############### uploading the data from the csv to pandas df ############################################
 # this is a file with 40 tech companies - small sample for now
@@ -225,8 +179,7 @@ def load_top_40_tech_companies_csv(where_the_code_runs: int) -> pd.DataFrame: #T
     if(where_the_code_runs not in [1, 2]):
         raise ValueError('Where code must be either 1 or 2.')
 
-    tech_40_path = Access_the_file_path(where_the_code_runs, tech_40_path_local, tech_40_path_google_colab)
-    df_top_40_tech_companies = pd.read_csv(tech_40_path)
+    df_top_40_tech_companies = pd.read_csv(TECH_UNIVERSE_CSV)
     return df_top_40_tech_companies
 
 
@@ -239,12 +192,7 @@ def load_top_40_tech_companies_names(where_the_code_runs: int) -> list[str]: #TE
     if(where_the_code_runs not in [1, 2]):
         raise ValueError('Where code must be either 1 or 2.')
 
-    path_top_40_tech_companies_names_pkl = Access_the_file_path(
-        where_the_code_runs = where_the_code_runs,
-        path_local = pickle_file_path_top_40_tech_names_local,
-        path_google_colab=pickle_file_path_top_40_tech_names_google_colab
-    )
-    return unpickle_data(path_top_40_tech_companies_names_pkl)
+    return unpickle_data(TOP_40_TECH_COMPANIES_NAMES)
 
 def load_Earliest_Timestamps_top_40_tech_companies_daily(where_the_code_runs) -> dict[str, pd.Timestamp]: #TESTED
     """
@@ -254,12 +202,7 @@ def load_Earliest_Timestamps_top_40_tech_companies_daily(where_the_code_runs) ->
     """
     if(where_the_code_runs not in [1, 2]):
         raise ValueError('Where code must be either 1 or 2.')
-    path_Earliest_Timestamps_top_40_tech_companies_daily_pkl = Access_the_file_path(
-        where_the_code_runs=where_the_code_runs,
-        path_local=pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies_local,
-        path_google_colab=pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies_google_colab
-    )
-    return unpickle_data(path_Earliest_Timestamps_top_40_tech_companies_daily_pkl)
+    return unpickle_data(EARLIEST_TIMESTAMPS_DAILY_TOP_40)
 
 
 ################ Twelve data this is a website for API calls for stocks data ############################
@@ -284,12 +227,7 @@ def load_Earliest_Timestamps_top_40_tech_companies_hourly(where_the_code_runs) -
     if(where_the_code_runs not in [1, 2]):
         raise ValueError('Where code must be either 1 or 2.')
 
-    path_Earliest_Timestamps_top_40_tech_companies_hourly_pkl = Access_the_file_path(
-        where_the_code_runs=where_the_code_runs,
-        path_local=pickle_file_path_Earliest_Timestamps_hourly_top_40_teach_companies_local,
-        path_google_colab=pickle_file_path_Earliest_Timestamps_hourly_top_40_teach_companies_google_colab
-    )
-    return unpickle_data(path_Earliest_Timestamps_top_40_tech_companies_hourly_pkl)
+    return unpickle_data(EARLIEST_TIMESTAMPS_HOURLY_TOP_40)
 
 
 
@@ -302,13 +240,7 @@ def load_five_thousand_days_data_df(where_the_code_runs: int) -> pd.DataFrame: #
     if(where_the_code_runs not in [1, 2]):
         raise ValueError('Where code must be either 1 or 2.')
 
-    path_five_thousand_days_data_pkl = Access_the_file_path(
-        where_the_code_runs=where_the_code_runs,
-        path_local=pickle_five_thousand_days_data_file_path_local,
-        path_google_colab=pickle_five_thousand_days_data_file_path_google_colab
-    )
-
-    return unpickle_data(path_five_thousand_days_data_pkl)
+    return unpickle_data(FIVE_THOUSAND_DAYS_DATA)
 
 
 def load_five_thousand_days_data_experiment_df(where_the_code_runs: int) -> pd.DataFrame: #TESTED
@@ -320,13 +252,7 @@ def load_five_thousand_days_data_experiment_df(where_the_code_runs: int) -> pd.D
     if(where_the_code_runs not in [1, 2]):
         raise ValueError('Where code must be either 1 or 2.')
 
-    path_experiment_pkl = Access_the_file_path(
-        where_the_code_runs=where_the_code_runs,
-        path_local=experiment_pickle_file_path_local,
-        path_google_colab=experiment_pickle_file_path_google_colab
-    )
-
-    return unpickle_data(path_experiment_pkl)
+    return unpickle_data(FIVE_THOUSAND_DAYS_DATA_EXPERIMENT)
 
 def load_data_experiment_train_and_validation_df(where_the_code_runs: int) -> pd.DataFrame: #TESTED
     """
@@ -337,13 +263,7 @@ def load_data_experiment_train_and_validation_df(where_the_code_runs: int) -> pd
     if(where_the_code_runs not in [1, 2]):
         raise ValueError('Where code must be either 1 or 2.')
 
-    path_train_and_validation_pkl = Access_the_file_path(
-        where_the_code_runs=where_the_code_runs,
-        path_local=experiment_train_and_validation_pickle_file_path_local,
-        path_google_colab=experiment_train_and_validation_pickle_file_path_google_colab
-    )
-
-    return unpickle_data(path_train_and_validation_pkl)
+    return unpickle_data(EXPERIMENT_TRAIN_AND_VALIDATION_DATA)
 
 
 def load_data_experiment_test_df(where_the_code_runs: int) -> pd.DataFrame: #TESTED
@@ -355,13 +275,7 @@ def load_data_experiment_test_df(where_the_code_runs: int) -> pd.DataFrame: #TES
     if(where_the_code_runs not in [1, 2]):
         raise ValueError('Where code must be either 1 or 2.')
 
-    path_test_pkl = Access_the_file_path(
-        where_the_code_runs=where_the_code_runs,
-        path_local=experiment_test_pickle_file_path_local,
-        path_google_colab=experiment_test_pickle_file_path_google_colab
-    )
-
-    return unpickle_data(path_test_pkl)
+    return unpickle_data(EXPERIMENT_TEST_DATA)
 """
 # NOTICE: the code works but we will get different time frames when switching the interval ->
  APPLY -> hourly: 2019-01-07 09:00:00, daily: 1980-12-12 00:00:00
@@ -1521,11 +1435,7 @@ def main() -> None:
                                                "daily_return_percentage": "ret_1",
                                                "perf_month": "ret_30"})
     # pickle the data
-    five_thousand_days_data_df_path = Access_the_file_path(where_the_code_runs = where_the_code_runs,
-                                                           path_local = pickle_five_thousand_days_data_file_path_local,
-                                                           path_google_colab = pickle_five_thousand_days_data_file_path_google_colab)
-
-    pickling_func(data = five_thousand_days_data_df, file_path = five_thousand_days_data_df_path)
+    pickling_func(data = five_thousand_days_data_df, file_path = FIVE_THOUSAND_DAYS_DATA)
     # delete
 
     # calling the function and adding the ret_7 data
@@ -1649,11 +1559,7 @@ def main() -> None:
                                                              prefix = 'exchange')
 #
 #     we saved the last version on the pickle_file_path as well, and saved it on the main df name
-    # seleting where to pickle the data based on where we run
-    experiment_pickle_file_path = Access_the_file_path(where_the_code_runs = where_the_code_runs,
-                                                       path_local = experiment_pickle_file_path_local,
-                                                       path_google_colab = experiment_pickle_file_path_google_colab
-                                                       )
+    experiment_pickle_file_path = FIVE_THOUSAND_DAYS_DATA_EXPERIMENT
 
 
 #   called once and pickled
@@ -1742,10 +1648,7 @@ def main() -> None:
     # print(f'data_experiment_test_df: {len(data_experiment_test_df)}')
     # print(f'five_thousand_days_data_experiment_df: {len(five_thousand_days_data_experiment_df)}\n')
 
-    # selecting the path based on where we run the code
-    experiment_train_and_validation_pickle_file_path = Access_the_file_path(where_the_code_runs = where_the_code_runs,
-                                                                            path_local = experiment_train_and_validation_pickle_file_path_local,
-                                                                            path_google_colab = experiment_train_and_validation_pickle_file_path_google_colab)
+    experiment_train_and_validation_pickle_file_path = EXPERIMENT_TRAIN_AND_VALIDATION_DATA
 
     data_experiment_train_and_validation_df = keep_common_dates_only(data_experiment_train_and_validation_df)
     pickling_func(data_experiment_train_and_validation_df, experiment_train_and_validation_pickle_file_path) # called it once, now it is saved
@@ -1755,12 +1658,7 @@ def main() -> None:
         f'list of the columns of data_experiment_train_and_validation_df: {data_experiment_train_and_validation_df.columns.tolist()}'
     )
 
-    # selecting the path
-    experiment_test_pickle_file_path = Access_the_file_path(
-        where_the_code_runs=where_the_code_runs,
-        path_local=experiment_test_pickle_file_path_local,
-        path_google_colab=experiment_test_pickle_file_path_google_colab
-    )
+    experiment_test_pickle_file_path = EXPERIMENT_TEST_DATA
 
     data_experiment_test_df = keep_common_dates_only(data_experiment_test_df)
     pickling_func(data_experiment_test_df, experiment_test_pickle_file_path) # called it once, now it is saved

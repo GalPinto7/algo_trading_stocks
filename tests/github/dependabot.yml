@@ -1,0 +1,11 @@
+version: 2
+
+updates:
+  # use pip, for now it is judt python
+  - package-ecosystem: "pip"
+    # the requirements.txt is in the root folder
+    directory: "/"
+    schedule:
+      # checks for updates once a weel
+      interval: "weekly"
+    open-pull-requests-limit: 5

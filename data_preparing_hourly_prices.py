@@ -6,7 +6,10 @@ from data_preparing import (
     load_top_40_tech_companies_names,
     load_five_thousand_days_data_df,
     load_Earliest_Timestamps_top_40_tech_companies_hourly,
-    Access_the_file_path
+)
+from paths import (
+    FIVE_THOUSAND_HOURLY_DATA,
+    FIVE_THOUSAND_HOURLY_FINAL_DATA,
 )
 from twelve_data_api import all_df_creator
 from runtime_config import get_where_the_code_runs
@@ -26,22 +29,6 @@ NOTICE: We might need to make changes to the models and function in evaluation_a
 Add alot more rows to the df
 """
 
-
-
-#####################################################paths of files#####################################################
-# this is for final files
-pickle_hourly_temp_file_final_local = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_hourly_final_data.pkl"
-pickle_hourly_temp_file_final_google_colab = r"/content/algo_trading_stocks/data/five_thousand_hourly_final_data.pkl"
-
-
-# pickling the data for future use
-pickle_hourly_file_path_local = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_hourly_data.pkl"
-pickle_hourly_file_path_google_colab = r"/content/algo_trading_stocks/data/five_thousand_hourly_data.pkl"
-
-# this is for temp files
-pickle_hourly_temp_file_path_local = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_hourly_temp_data.pkl"
-pickle_hourly_temp_file_path_google_colab = r"/content/algo_trading_stocks/data/five_thousand_hourly_temp_data.pkl"
-########################################################################################################################
 
 
 def create_df_of_hourly_prices(df: pd.DataFrame, companies_list_earliest_timestamp_dict: dict):
@@ -155,10 +142,7 @@ def main() -> None:
                                                start_date=current_start_date,
                                                end_date=min_start_date_plus_five_thousand_hours)  # called it once, now it is saved
 
-    # selecting the right path -> local/colab
-    path_hourly_data = Access_the_file_path(where_the_code_runs = where_the_code_runs,
-                                path_local = pickle_hourly_file_path_local,
-                                path_google_colab = pickle_hourly_file_path_google_colab)
+    path_hourly_data = FIVE_THOUSAND_HOURLY_DATA
 
     """
     the daily df has col->'date'->2020-09-30
@@ -180,11 +164,7 @@ def main() -> None:
                                           companies_list_earliest_timestamp_dict = Earliest_Timestamps_top_40_tech_companies_hourly
                                           )
 
-    # # selecting the right path for the final df-> local/colab
-    # todo: fix later when this file is in the GitHub
-    path_hourly_data_final = Access_the_file_path(where_the_code_runs=where_the_code_runs,
-                                            path_local=pickle_hourly_temp_file_final_local,
-                                            path_google_colab=pickle_hourly_temp_file_final_google_colab)
+    path_hourly_data_final = FIVE_THOUSAND_HOURLY_FINAL_DATA
 
     pickling_func(final_df, path_hourly_data_final)  # called it once, now it is saved
     final_five_thousand_days_of_hourly_data_df = unpickle_data(path_hourly_data_final)
