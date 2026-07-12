@@ -2,19 +2,75 @@
 # email
 # regulr password
 from __future__ import annotations
-
+from runtime_config import get_where_the_code_runs
 import pandas as pd
-from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
-import requests
-from twelvedata import TDClient
 import time
 import pickle
 import math
 from sklearn.preprocessing import MinMaxScaler
 from datetime import datetime, timedelta, date
-from runtime_config import where_the_code_runs
+
+from paths import (
+    TECH_UNIVERSE_CSV,
+    TOP_40_TECH_COMPANIES_NAMES,
+    FIVE_THOUSAND_DAYS_DATA,
+    FIVE_THOUSAND_DAYS_DATA_TESTING,
+    FIVE_THOUSAND_DAYS_DATA_EXPERIMENT,
+    EXPERIMENT_TRAIN_AND_VALIDATION_DATA,
+    EXPERIMENT_TEST_DATA,
+    EARLIEST_TIMESTAMPS_DAILY_TOP_40,
+    EARLIEST_TIMESTAMPS_HOURLY_TOP_40,
+)
+"""
+every function with a "#tested" means we tested the function in the test_data_preparing.py and it should be fine.
+"""
+
+"""
+import the API function.
+"""
+from twelve_data_api import (
+    get_td_client,
+    td,
+    company_exchange_and_currency_fetcher,
+    company_earliest_timestamp_fetcher,
+    companies_list_earliest_timestamp_dict_fetcher,
+    company_data_prices_fetcher,
+    all_df_creator,
+    acceptable_intervals
+)
+
+# todo: Add more error handling.
+# todo: check next_day_return, data leak? -> NO!!! we do not train on this, this is only the y_col to test the model.
+# todo: delete all the callables that are outside the main function -> DONE
+# todo: understand what to comment and what not in the main()
+# todo: change the names of these cols [pref_week,daily_return_percentage,perf_month] -> [ret_7,ret_1,ret_30]
+"""
+This code is responsible of preparing the data.
+Cleaning it, and calculating new fields.
+"""
+
+"""
+Current fields in the csv:
+['symbol', 'exchange', 'currency', 'date', 'open', 'high', 'low', 'close', 'volume', 'pref_week', 'daily_return_percentage',
+ 'perf_month', 'relative_volume_20_days', 'ret_2', 'ret_3', 'ret_5', 'ret_10', 'SMA_20', 'SMA_50', 'SMA_20_gap_percent',
+  'SMA_50_gap_percent', 'exchange_NYSE', 'exchange_NASDAQ', 'next_day_return',
+   'symbol_AAPL', 'symbol_ACN', 'symbol_ADBE', 'symbol_ADP', 'symbol_AMAT',
+    'symbol_AMD', 'symbol_ANET', 'symbol_APH', 'symbol_AVGO', 'symbol_CDNS',
+     'symbol_CRM', 'symbol_CRWD', 'symbol_CSCO', 'symbol_DDOG', 'symbol_DELL',
+      'symbol_DOCU', 'symbol_FTNT', 'symbol_HPE', 'symbol_HPQ', 'symbol_IBM',
+       'symbol_INTC', 'symbol_INTU', 'symbol_KLAC', 'symbol_LRCX', 'symbol_MSFT', 'symbol_MU',
+        'symbol_NET', 'symbol_NOW', 'symbol_NVDA', 'symbol_ORCL', 'symbol_PANW', 'symbol_PLTR',
+         'symbol_QCOM', 'symbol_ROP', 'symbol_SHOP', 'symbol_SNPS', 'symbol_TTD', 'symbol_TXN',
+          'symbol_UBER', 'symbol_ZM', 'symbol_AAPL', 'symbol_ACN', 'symbol_ADBE', 'symbol_ADP',
+           'symbol_AMAT', 'symbol_AMD', 'symbol_ANET', 'symbol_APH', 'symbol_AVGO', 'symbol_CDNS', 'symbol_CRM',
+            'symbol_CRWD', 'symbol_CSCO', 'symbol_DDOG', 'symbol_DELL', 'symbol_DOCU', 'symbol_FTNT', 'symbol_HPE',
+             'symbol_HPQ', 'symbol_IBM', 'symbol_INTC', 'symbol_INTU', 'symbol_KLAC', 'symbol_LRCX', 'symbol_MSFT',
+              'symbol_MU', 'symbol_NET', 'symbol_NOW', 'symbol_NVDA', 'symbol_ORCL', 'symbol_PANW', 'symbol_PLTR',
+               'symbol_QCOM', 'symbol_ROP', 'symbol_SHOP', 'symbol_SNPS',
+                'symbol_TTD', 'symbol_TXN', 'symbol_UBER', 'symbol_ZM']
+"""
 
 """
 amount of data:
@@ -55,24 +111,29 @@ predict -> next-day percent return for each stock
 
 # todo: add more fields.
 # todo: we declarer of the var type in the signature of the functions -> easy to read.
-# todo: check if I should run on cloud because I have no GPU
 
 
 
+############empty vars we will update later - def here so code will not crush in diffrent files how use them############
+# Safe defaults.
+# They prevent heavy file loading during import.
+df_top_40_tech_companies = None
+top_40_tech_names = None
+Earliest_Timestamps_top_40_tech_companies_daily = None
+Earliest_Timestamps_top_40_tech_companies_hourly = None
+five_thousand_days_data_df = None
+five_thousand_days_data_experiment_df = None
+data_experiment_train_and_validation_df = None
+data_experiment_test_df = None
+min_date_all_symbols_have = None
+max_date = None
+########################################################################################################################
 
-if(where_the_code_runs != 1 and where_the_code_runs != 2):
-    raise ValueError('Can select only between 1 or 2.')
 
-############### uploading the data from the csv to pandas df ############################################
+    ############### uploading the data from the csv to pandas df ############################################
 # this is a file with 40 tech companies - small sample for now
 # columns -> ticker = stock symbol, company_name = full company name, group = rough tech subgroup, include_flag = 1 means include in the universe, notes = short reminder about the company
-tech_40_path = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\tech_universe.csv"
-if (where_the_code_runs == 2):
-    tech_40_path = r"/content/algo_trading_stocks/data/tech_universe.csv"
-df_top_40_tech_companies = pd.read_csv(tech_40_path)
 
-# list of the names of all the companies in the df_top_40_tech_companies
-top_40_tech_names = df_top_40_tech_companies['ticker'].tolist()
 
 # we want to see all the cols of the pandas df, if you don't, delete
 pd.set_option('display.max_columns', None)
@@ -80,326 +141,146 @@ pd.set_option('display.max_columns', None)
 
 
 ###################################################pickling function###################################################
-def pickling_func(data, file_path: str):
+def pickling_func(data, file_path: str): #TESTED
     """
     Save a Python object to a pickle file.
-
     :param data: The Python object to save
     :param file_path: Path to the pickle file (not an existing one)
     """
+    if(data is None):
+        raise ValueError("data can't be None!")
+    elif(file_path is None):
+        raise ValueError("file_path can't be None!")
     # wb - writing in binary mode
     with open(file_path,'wb') as f:
         pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)
 
-def unpickle_data(file_path: str):
+def unpickle_data(file_path: str): #TESTED
     """
     Load a Python object from a pickle file.
-
     :param file_path: Path to the pickle file
     :return: The restored Python object (with the same data type as it was)
     """
     # rb - read binary file
+    if file_path is None:
+        raise ValueError("file_path can't be None!")
     with open(file_path, 'rb') as f:
         return pickle.load(f)
+
+
+
+##################################################loaders of the data##################################################
+def load_top_40_tech_companies_csv(where_the_code_runs: int) -> pd.DataFrame: #TESTED
+    """
+    Returns the csv of the top 40 companies, as a pandas dataframe.
+    :param where_the_code_runs: 1 -> local, 2 -> google colab.
+    :return: The csv of the top 40 companies, as a pandas dataframe.
+    """
+    if(where_the_code_runs not in [1, 2]):
+        raise ValueError('Where code must be either 1 or 2.')
+
+    df_top_40_tech_companies = pd.read_csv(TECH_UNIVERSE_CSV)
+    return df_top_40_tech_companies
+
+
+def load_top_40_tech_companies_names(where_the_code_runs: int) -> list[str]: #TESTED
+    """
+    Goes to the path of the pkl file with the names of the companies.
+    :param where_the_code_runs: 1 -> local, 2 -> google colab.
+    :return: A list of top 40 companies names.
+    """
+    if(where_the_code_runs not in [1, 2]):
+        raise ValueError('Where code must be either 1 or 2.')
+
+    return unpickle_data(TOP_40_TECH_COMPANIES_NAMES)
+
+def load_Earliest_Timestamps_top_40_tech_companies_daily(where_the_code_runs) -> dict[str, pd.Timestamp]: #TESTED
+    """
+    Loads the Earliest_Timestamps daily.
+    :param where_the_code_runs: 1 -> local, 2 -> google colab.
+    :return: Dict of the Earliest_Timestamps_daily of the 40_tech_companies.
+    """
+    if(where_the_code_runs not in [1, 2]):
+        raise ValueError('Where code must be either 1 or 2.')
+    return unpickle_data(EARLIEST_TIMESTAMPS_DAILY_TOP_40)
+
 
 ################ Twelve data this is a website for API calls for stocks data ############################
 
 """
 we need to call the API calls just once,
 after that we just pickle the data in a file and then
-just call it
+just call it.
 """
-
-# todo: write the API key in a different place
-Twelve_data_API_key = '8b8436f89bc649d1921065d6bfca8c60'
-
-# Initialize client with your API key
-td = TDClient(apikey=Twelve_data_API_key)
-
-# todo: this is the API doc: https://twelvedata.com/docs#ws-real-time-price, use it
-
-def company_exchange_and_currency_fetcher(ticker_symbol: str):
-    """
-    This function returns the Exchange and Currency type
-    :param ticker_symbol: the symbol of the stock
-    :return: a tuple of the Exchange and Currency type
-    """
-    url = "https://api.twelvedata.com/symbol_search"
-    params = {
-        "symbol": ticker_symbol,
-        'API_KEY': Twelve_data_API_key
-    }
-
-    data = requests.get(url, params = params).json()
-    exchange = data['data'][0]['exchange']
-    currency = data['data'][0]['currency']
-
-    return exchange, currency
-
-"""
-A list of all the acceptable_intervals
-"""
-acceptable_intervals = ['1min', '5min', '15min', '30min', '45min', '1h', '2h', '4h', '8h', '1day', '1week', '1month']
-def company_earliest_timestamp_fetcher(ticker_symbol: str, interval: str = '1day') -> pd.Timestamp:
-    """
-    This function returns the Earliest Timestamp of a given stock.
-    :param ticker_symbol: The symbol of the stock we want to get its Earliest Timestamp.
-    :param interval: The interval we want (Earliest day, Earliest day+hour...)
-                     1min, 5min, 15min, 30min, 45min, 1h, 2h, 4h, 8h, 1day, 1week, 1month
-    :return: The Earliest Timestamp of a given stock.
-    """
-
-    if (interval not in acceptable_intervals):
-        raise ValueError('interval must be in the acceptable_intervals list.')
-
-    # This is the API endpoint for earliest_timestamp + symbol + interval + API key
-    url = (
-        f'https://api.twelvedata.com/earliest_timestamp'
-        f'?symbol={ticker_symbol}'
-        f'&interval={interval}'
-        f'&apikey={Twelve_data_API_key}'
-    )
-
-    data = requests.get(url).json()
-
-    if "datetime" not in data:
-        raise ValueError(f"API error: {data}")
-
-    earliest_timestamp = pd.to_datetime(data["datetime"])
-    return earliest_timestamp
-
-def companies_list_earliest_timestamp_dict_fetcher(symbols_list: list[str], interval: str = '1day')\
-        -> dict[str, pd.Timestamp]:
-    """
-    Loops over a list od symbols and returns a dict with -> key: symbol, value: Earliest Timestamp
-    :param symbols_list: The list of the relevant symbols.
-    :param interval: The wanted interval.
-    :return: A dict with -> key: symbol, value: Earliest Timestamp
-    """
-    symbols_earliest_timestamp = {}
-
-    if (interval not in acceptable_intervals):
-        raise ValueError('interval must be in the acceptable_intervals list.')
-
-    counter = 1
-    print(f'start fetching the earliest_timestamps for the {symbols_list} stocks.')
-    # we have to add a counter because we are limited to 8 requests per minute.
-    for symbol in symbols_list:
-        symbols_earliest_timestamp[symbol] = company_earliest_timestamp_fetcher(symbol, interval)
-        if counter % 8 == 0 and counter < len(symbols_list):
-            print("Reached minute credit limit, sleeping for 60 seconds...")
-            time.sleep(60)
-        counter += 1
-
-    return symbols_earliest_timestamp
-
-# the path of the Earliest_Timestamps for the top 40 teach companies
-pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\Earliest_Timestamps_daily_top_40_teach_companies_data.pkl"
-if (where_the_code_runs == 2):
-    print('we are in the google colab -> data_preparing')
-    pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies = r"/content/algo_trading_stocks/data/Earliest_Timestamps_daily_top_40_teach_companies_data.pkl"
-
-"""
-creating a dict of the Earliest_Timestamps_daily of the 40_tech_companies and pickle it.
-"""
-# Earliest_Timestamps_top_40_tech_companies_daily = companies_list_earliest_timestamp_dict_fetcher(top_40_tech_names) # called it once
-# pickling_func(Earliest_Timestamps_top_40_tech_companies_daily, pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies) # called it once, now it is saved
-Earliest_Timestamps_top_40_tech_companies_daily = unpickle_data(pickle_file_path_Earliest_Timestamps_daily_top_40_teach_companies)
 
 # To excess the timestamp you write -> Earliest_Timestamps_top_40_tech_companies_daily[symbol_name]
 
 """
 Doing the same a dict of the Earliest_Timestamps_hourly of the 40_tech_companies and pickle it.
 """
-pickle_file_path_Earliest_Timestamps_hourly_top_40_teach_companies = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\Earliest_Timestamps_hourly_top_40_teach_companies_data.pkl"
-if(where_the_code_runs == 2):
-    pickle_file_path_Earliest_Timestamps_hourly_top_40_teach_companies = r"/content/algo_trading_stocks/data/Earliest_Timestamps_hourly_top_40_teach_companies_data.pkl"
+def load_Earliest_Timestamps_top_40_tech_companies_hourly(where_the_code_runs) -> dict[str, pd.Timestamp]: #TESTED
+    """
+    Loads the Earliest_Timestamps hourly.
+    :param where_the_code_runs: 1 -> local, 2 -> google colab.
+    :return: Dict of the Earliest_Timestamps_hourly of the 40_tech_companies.
+    """
+    if(where_the_code_runs not in [1, 2]):
+        raise ValueError('Where code must be either 1 or 2.')
+
+    return unpickle_data(EARLIEST_TIMESTAMPS_HOURLY_TOP_40)
 
 
+
+def load_five_thousand_days_data_df(where_the_code_runs: int) -> pd.DataFrame: #TESTED
+    """
+    Loads the five_thousand_days_data_df DataFrame.
+    :param where_the_code_runs: 1 -> local, 2 -> google colab.
+    :return: five_thousand_days_data_df
+    """
+    if(where_the_code_runs not in [1, 2]):
+        raise ValueError('Where code must be either 1 or 2.')
+
+    return unpickle_data(FIVE_THOUSAND_DAYS_DATA)
+
+
+def load_five_thousand_days_data_experiment_df(where_the_code_runs: int) -> pd.DataFrame: #TESTED
+    """
+    Loads the five_thousand_days_data_experiment_df DataFrame.
+    :param where_the_code_runs: 1 -> local, 2 -> google colab.
+    :return: five_thousand_days_data_experiment_df
+    """
+    if(where_the_code_runs not in [1, 2]):
+        raise ValueError('Where code must be either 1 or 2.')
+
+    return unpickle_data(FIVE_THOUSAND_DAYS_DATA_EXPERIMENT)
+
+def load_data_experiment_train_and_validation_df(where_the_code_runs: int) -> pd.DataFrame: #TESTED
+    """
+    Loads the data_experiment_train_and_validation_df DataFrame.
+    :param where_the_code_runs: 1 -> local, 2 -> google colab.
+    :return: data_experiment_train_and_validation_df
+    """
+    if(where_the_code_runs not in [1, 2]):
+        raise ValueError('Where code must be either 1 or 2.')
+
+    return unpickle_data(EXPERIMENT_TRAIN_AND_VALIDATION_DATA)
+
+
+def load_data_experiment_test_df(where_the_code_runs: int) -> pd.DataFrame: #TESTED
+    """
+    Loads the data_experiment_test_df DataFrame.
+    :param where_the_code_runs: 1 -> local, 2 -> google colab.
+    :return: data_experiment_test_df
+    """
+    if(where_the_code_runs not in [1, 2]):
+        raise ValueError('Where code must be either 1 or 2.')
+
+    return unpickle_data(EXPERIMENT_TEST_DATA)
 """
-# NOTICE: the code works but we will get diffrent time frames when switching the interval ->
- APPL -> hourly: 2019-01-07 09:00:00, daily: 1980-12-12 00:00:00
+# NOTICE: the code works but we will get different time frames when switching the interval ->
+ APPLY -> hourly: 2019-01-07 09:00:00, daily: 1980-12-12 00:00:00
 """
 
-# Earliest_Timestamps_top_40_tech_companies_hourly = companies_list_earliest_timestamp_dict_fetcher(top_40_tech_names,'1h') # called it
-# pickling_func(Earliest_Timestamps_top_40_tech_companies_hourly, pickle_file_path_Earliest_Timestamps_hourly_top_40_teach_companies) # called it once, now it is saved
-Earliest_Timestamps_top_40_tech_companies_hourly = unpickle_data(pickle_file_path_Earliest_Timestamps_hourly_top_40_teach_companies)
-
-
-# todo: Maybe need to fix here as well the part of the start date
-def company_data_prices_fetcher(ticker_symbol: str, wanted_interval: str, how_many_intervals: int,
-                                start_date:  pd.Timestamp |None = None, end_date: pd.Timestamp |None = None):
-    """
-    This function returns the Price bars data
-    NOTICE: the error handling is builtin the API.
-    :param ticker_symbol: the symbol of the stock
-    :param wanted_interval: the wanted interval: 1min, 5min, 15min, 30min, 45min, 1h, 2h, 4h, 8h, 1day, 1week, 1month
-    :param how_many_calls: the number of calls.
-    :param start_date: The code won't take any rows before this date.
-    :param end_date: The code won't take any rows after this date.
-    :return: A pandas DF for the company we asked with: symbol, exchange, currency, open, high, low, close, volume
-    """
-    # check that the end date is bigger than the start date (if they exist).
-    if (start_date is not None) and (end_date is not None) and (start_date > end_date):
-        raise ValueError("start_date must be <= end_date")
-
-    pands_df = td.time_series(
-        symbol=ticker_symbol,
-        interval=wanted_interval,
-        outputsize=how_many_intervals,
-        start_date = start_date,
-        end_date = end_date
-    ).as_pandas()
-
-    pands_df = pands_df.reset_index()
-
-    # adding the symbol of the company to the pandas df
-    pands_df.insert(0, 'symbol', ticker_symbol)
-
-    # adding the exchange and the currency of the stock
-    exchange, currency = company_exchange_and_currency_fetcher(ticker_symbol)
-    pands_df.insert(1, 'exchange', exchange)
-    pands_df.insert(2, 'currency', currency)
-    return pands_df
-
-
-
-# todo: Think about getting Fundamental data as well
-
-
-# todo: we need to make sure the functions can handle if there are no trading data in the date we put,
-#  start from min_date > 5000 days ago, for each stock
-def all_df_creator(ticker_list: list[str], wanted_interval: str, how_many_intervals: int,
-                   start_date:  pd.Timestamp |None = None, end_date: pd.Timestamp |None = None,
-                   forward_or_backward_flag: int | None = None,
-                   check_Earliest_Timestamp_for_df_flag: int | None = None):
-    """
-    Returns a pandas df with the data of all the companies in company_names_list.
-    NOTICE: the error handling is builtin the API.
-    :param ticker_list: List of the names of the relevant companies
-    :param wanted_interval: Interval -> 1min, 5min, 15min, 30min, 45min, 1h, 2h, 4h, 8h, 1day, 1week, 1month
-    :param how_many_intervals: How many interval records do we want
-            NOTICE: the range of is [1,5000]
-            NOTICE: if you want daily prices, hour prices, and min for x days you need to so.
-            NOTICE: if you use the function in different days, the time frame will shift as well
-    :param start_date: The code won't take any rows before this date.
-    :param end_date: The code won't take any rows after this date.
-    :param forward_or_backward_flag: A flag to say if we start from today and go back, or start from the
-                                     start_date and go forward.
-                                     forward_or_backward_flag = None -> from today and go back.
-                                     forward_or_backward_flag = 1 ->  start_date and go forward.
-    :param check_Earliest_Timestamp_for_df_flag: This flag says if we need to check the Earliest_Timestamp_for_df
-                                                 or not, because if we just work on a known df, we don't need to waste
-                                                 time and API calls on getting the Earliest_Timestamps, we can get
-                                                 it once and pickle it.
-                                                 For now the default one is the
-                                                 check_Earliest_Timestamp_for_df_flag = None -> no need to check for df.
-                                                 check_Earliest_Timestamp_for_df_flag = 1 -> need to check for df.
-    :return: A pandas df with the data of all the companies in company_names_list
-    """
-    dfs = []
-
-    if (wanted_interval not in acceptable_intervals):
-        raise ValueError('Wanted_interval must be in the acceptable_intervals list!')
-
-    if (how_many_intervals <= 0 or 5000 < how_many_intervals ):
-        raise ValueError('how_many_intervals must be in [1,5000]')
-
-    if not((forward_or_backward_flag is None) or (forward_or_backward_flag == 1)):
-        raise ValueError('invalid forward_or_backward_flag value!')
-
-    if not ((check_Earliest_Timestamp_for_df_flag is None) or (check_Earliest_Timestamp_for_df_flag == 1)):
-        raise ValueError('invalid check_Earliest_Timestamp_for_df_flag value!')
-
-    companies_list_earliest_timestamp_dict = None
-    if(check_Earliest_Timestamp_for_df_flag == 1):
-        # a dict of the earliest_timestamp of all the companies in the given df
-        companies_list_earliest_timestamp_dict = (companies_list_earliest_timestamp_dict_fetcher
-                                                  (ticker_list, wanted_interval))
-
-    # Means we use the default df -> Earliest_Timestamps_top_40_tech_companies_daily or
-    # Earliest_Timestamps_top_40_tech_companies_hourly
-    # in python we compare strings with '=='
-    else:
-        if(wanted_interval == '1day'):
-            companies_list_earliest_timestamp_dict = Earliest_Timestamps_top_40_tech_companies_daily
-        elif(wanted_interval == '1h'):
-            companies_list_earliest_timestamp_dict = Earliest_Timestamps_top_40_tech_companies_hourly
-        # for now, we only have default df only for these two
-        else:
-            raise ValueError('There is not a default df for this wanted_interval !')
-
-
-    # the api allows 8 ticker in a min or less, so we added a counter
-    # after 8 companies, we sleep for a min
-    for i, ticker in enumerate(ticker_list, start=1):
-        # if we are getting data from today backwards, forward_or_backward_flag is None ->
-        # there is no need to check what is the Earliest Timestamp.
-        # if we reach it we will stop.
-        # if we want to start for date x and go forward, forward_or_backward_flag -> we need to now what is the Earliest Timestamp.
-
-        if(ticker not in companies_list_earliest_timestamp_dict):
-            raise ValueError('This symbol does not exists in the companies_list_earliest_timestamp_dict!')
-
-        ticker_earliest_timestamp = companies_list_earliest_timestamp_dict[ticker]
-
-        # so we won't override the start_date, end_date for all the symbols
-        # each symbol we check separately
-        ticker_start_date = start_date
-        ticker_end_date = end_date
-        if (ticker_start_date is not None) and (ticker_start_date < ticker_earliest_timestamp):
-            # adjust the start and end date
-            if ticker_end_date is not None:
-                delta_between_start_and_end = ticker_end_date - ticker_start_date
-                ticker_start_date = ticker_earliest_timestamp
-                ticker_end_date = ticker_start_date + delta_between_start_and_end
-            else:
-                ticker_start_date = ticker_earliest_timestamp
-
-        company_data_df = company_data_prices_fetcher(
-            ticker_symbol=ticker,
-            wanted_interval=wanted_interval,
-            how_many_intervals=how_many_intervals,
-            start_date = ticker_start_date,
-            end_date = ticker_end_date
-        )
-        dfs.append(company_data_df)
-        # If you hit 8 symbols, wait for the next minute
-        if i % 8 == 0 and i < len(ticker_list):
-            print("Reached minute credit limit, sleeping for 60 seconds...")
-            time.sleep(60)
-
-    return pd.concat(dfs, ignore_index=True)
-
-
-########################################################################################
-
-###################### pickling the data so we do not have to upload the data each time ################################
-###################### we have to create a file to save the data so we can  just exsses it #############################
-
-
-# five_thousand_days_data = all_df_creator(top_40_tech_names, '1day',5000) # called it once, now it is saved
-# getting the stocks data
-
-pickle_file_path = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_days_data.pkl"
-if(where_the_code_runs == 2):
-    pickle_file_path = r"/content/algo_trading_stocks/data/five_thousand_days_data.pkl"
-# five_thousand_days_data_pickle = pickling_func(five_thousand_days_data, pickle_file_path) # called it once, now it is saved
-five_thousand_days_data_df = unpickle_data(pickle_file_path)
-
-
-
-# check code to see how many records per company
-# company_row_counts = five_thousand_days_data.groupby('symbol').size().sort_values()
-# print(company_row_counts)
-# makes sense we didn't get 40*5,000 , not all companies are active for that long -> 160,000 records makes sense
-
-# there is no need to pickle the 40_tech.csv and names list
-
-
-
-
-############################### geting more fundmental data ############################
 
 
 """
@@ -407,7 +288,7 @@ Calculating and adding columns manually section
 """
 
 def get_percent_change_from_x_closing_days_ago(symbol: str, date: pd.Timestamp, start_days_ago: int = 7,
-                                               df: pd.DataFrame| None = five_thousand_days_data_df):
+                                               df: pd.DataFrame | None = None): # tested
     """
     Return the percent change from the current closing price to the closing price
     found starting X calendar days ago, moving further back until a trading record is found.
@@ -417,18 +298,25 @@ def get_percent_change_from_x_closing_days_ago(symbol: str, date: pd.Timestamp, 
     :param start_days_ago: Initial number of days to go back
     :return: Percent change, or np.nan if no valid previous record is found
     """
+
+    if df is None:
+        raise ValueError('df must be provided.')
+
+    df = df.copy()
+    df["date"] = pd.to_datetime(df["date"])
+
     days_ago = start_days_ago
     start_date = pd.Timestamp(date).normalize()
 
     row_of_current_date = df[
         (df["symbol"] == symbol) &
-        (df["datetime"].dt.normalize() == start_date)
+        (df["date"].dt.normalize() == start_date)
     ]
 
     if (start_days_ago <= 0):
         raise ValueError('start_days_ago must be positive.')
 
-    if row_of_current_date.empty:
+    elif row_of_current_date.empty:
         return np.nan
 
     current_date_close_price = row_of_current_date["close"].iloc[0]
@@ -438,20 +326,20 @@ def get_percent_change_from_x_closing_days_ago(symbol: str, date: pd.Timestamp, 
 
         relevant_row = df[
             (df["symbol"] == symbol) &
-            (df["datetime"].dt.normalize() == date_days_ago)
+            (df["date"].dt.normalize() == date_days_ago)
         ]
 
         if not relevant_row.empty:
             close_price_days_ago = relevant_row["close"].iloc[0]
             return ((current_date_close_price - close_price_days_ago) / close_price_days_ago) * 100
 
-        if days_ago > 20:
+        elif days_ago > 20:
             return np.nan
 
         days_ago += 1
 
 
-def adding_col_with_values(df: pd.DataFrame, new_col_name: str, function):
+def adding_col_with_values(df: pd.DataFrame, new_col_name: str, function) -> pd.DataFrame: #TESTED
     """
     Adds a col with values to the df.
     :param df: the df
@@ -463,11 +351,11 @@ def adding_col_with_values(df: pd.DataFrame, new_col_name: str, function):
 
     if(new_col_name is None):
         raise ValueError ('new_col_name can not be null')
-    if( new_col_name in df.columns.tolist()):
+    elif( new_col_name in df.columns.tolist()):
         raise ValueError('The df has a col with this name already')
 
     for i, (_, row) in enumerate(df.iterrows(), start=1):
-        values.append(function(row["symbol"], row["datetime"]))
+        values.append(function(row["symbol"], row["date"]))
 
         if i % 1000 == 0:
             print(f"Processed {i} rows")
@@ -475,77 +363,6 @@ def adding_col_with_values(df: pd.DataFrame, new_col_name: str, function):
     df[new_col_name] = values
     return df
 
-# calling the function and adding the pref_week data
-# five_thousand_days_data_df = adding_col_with_values(five_thousand_days_data_df, 'pref_week', get_percent_change_from_x_closing_days_ago)
-# print(five_thousand_days_data_df.head(8))
-
-# todo: call the function again with pref_month and write 30 days in the function, not 7
-# pickling the new df
-# pickling_func(five_thousand_days_data_df, pickle_file_path) # called it once, now it is saved
-# five_thousand_days_data_df = unpickle_data(pickle_file_path)
-# five_thousand_days_data_df = five_thousand_days_data_df.rename(columns={'datetime': 'date'})
-# print(five_thousand_days_data_df.head(8))
-
-
-######################## adding more fields #################################333
-################################ works -> add the pref_week col and pickeld the data ###################################
-
-
-
-
-
-
-
-
-############ adding more feilds i can compute here ################
-
-
-
-# The function is right but really slow, each time filters the df,
-# will write the same function but much faster
-# def daily_return_percentage_calculator(symbol: str, date: pd.Timestamp):
-#     """
-#     Calculates the daily return percentage of a stock -> (p(t)-p(t-1))/p(t-1)
-#     :param symbol: The symbol of the stock
-#     :param date: The date
-#     :return: (close_p(date)-close_p(date-1))/close_p(date-1)
-#     """
-#
-#     # finding the close_p of a stock in a date
-#     relevant_date = pd.Timestamp(date).normalize()
-#     relevant_row = five_thousand_days_data_df[
-#         (five_thousand_days_data_df["symbol"] == symbol) &
-#         (five_thousand_days_data_df["date"].dt.normalize() == relevant_date)
-#     ]
-#
-#     if relevant_row.empty:
-#         return np.nan
-#
-#     closing_price_relevant_date = relevant_row['close'].iloc[0]
-#
-#     # doing the same for previous trading date
-#
-#     days_ago = 1
-#     # the previous trading day is not necessarily one day before
-#     closing_price_one_trading_day_before = None
-#     while closing_price_one_trading_day_before is None and days_ago <= 20:
-#         date_one_trading_day_before = (relevant_date - pd.Timedelta(days=days_ago)).normalize()
-#         relevant_row_one_trading_day_before = five_thousand_days_data_df[
-#             (five_thousand_days_data_df["symbol"] == symbol) &
-#             (five_thousand_days_data_df["date"].dt.normalize() == date_one_trading_day_before)
-#         ]
-#
-#         if not relevant_row_one_trading_day_before.empty:
-#             closing_price_one_trading_day_before = relevant_row_one_trading_day_before['close'].iloc[0]
-#
-#         days_ago += 1
-#
-#     if closing_price_one_trading_day_before is None:
-#         return np.nan
-#
-#     daily_return_percentage = (closing_price_relevant_date - closing_price_one_trading_day_before)/closing_price_one_trading_day_before
-#
-#     return daily_return_percentage
 
 
 
@@ -581,7 +398,7 @@ computes the formula in one vectorized operation
 So instead of thousands of repeated searches, pandas does one bulk operation.
 """
 
-def add_days_ago_return_percentage_fast(df: pd.DataFrame, days_ago: int, new_col_name: str) -> pd.DataFrame:
+def add_days_ago_return_percentage_fast(df: pd.DataFrame, days_ago: int, new_col_name: str) -> pd.DataFrame: #TESTED
     """
     Add daily return percentage per stock using the previous trading row.
 
@@ -589,6 +406,12 @@ def add_days_ago_return_percentage_fast(df: pd.DataFrame, days_ago: int, new_col
     :param days_ago: Initial number of days to go back
     :return: DataFrame with new new_col_name column
     """
+    if(df is None):
+        raise ValueError('df must be provided.')
+    elif(days_ago <= 0):
+        raise ValueError('days_ago must be positive.')
+    elif(new_col_name is None):
+        raise ValueError('new_col_name can not be null')
 
     # coping the df
     df = df.copy()
@@ -602,7 +425,7 @@ def add_days_ago_return_percentage_fast(df: pd.DataFrame, days_ago: int, new_col
 
     # Sorts the rows first by stock symbol, then by date.
     # taking on the 'close' col and 'symbol'
-    # shifting the close one row down, so p_close(t+1) is now p(t)
+    # shifting the close days_ago row down, so if days_ago = 1 -> p_close(t+1) is now p(t)
     prev_close_days_ago = df.groupby("symbol")["close"].shift(days_ago)
 
     # pandas matches values by index. so it know what to dived from what
@@ -628,16 +451,43 @@ def add_days_ago_return_percentage_fast(df: pd.DataFrame, days_ago: int, new_col
     return df
 
 
-first_row = five_thousand_days_data_df.iloc[0]
+def remove_duplicates_based_on_fields(df: pd.DataFrame, cols_to_check: list[str]) -> pd.DataFrame: # TESTED
+    """
+    Checks all the row in the df for duplicates based only on the values in the cols in the "cols_to_check" list.
+    :param df: The df we work on.
+    :param cols_to_check: A list of cols we want to compare the rows based on.
+    :return: The df with no 2 rows with the same values in ALL of these fields.
+    """
+    if(df is None):
+        raise ValueError("The df can't be None!")
+    elif len(cols_to_check) == 0:
+        raise ValueError("The cols_to_check list should not be empty")
+
+    cols_in_df = df.columns.tolist()
+
+    for col in cols_to_check:
+        if col not in cols_in_df:
+            raise ValueError ('All the cols in the "cols_to_check" must be in the df.')
+
+    df = df.drop_duplicates(subset=cols_to_check)
+    return df
 
 
-def fast_perf_x_trading_days_ago(df: pd.DataFrame, days_ago: int, col_name: str) -> pd.DataFrame:
+def fast_perf_x_trading_days_ago(df: pd.DataFrame, days_ago: int, col_name: str) -> pd.DataFrame: #TESTED
     """
     Add x_trading_days_ago return percentage per stock using the previous x_trading_days_ago trading row.
-
+    NOTICE: THIS IS FOR THE WHOLE DF.
     :param df: DataFrame with at least ['symbol', 'date', 'close']
+    :param days_ago:
+    :param col_name: relevant col, can be in the df or not.
     :return: DataFrame with new 'pref' column
     """
+    if(df is None):
+        raise ValueError("Df can't be none.")
+    elif(days_ago<=0):
+        raise ValueError("days ago can't be none.")
+    elif(col_name is None):
+        raise ValueError("col_name can not be null.")
 
     df = df.copy()
 
@@ -645,15 +495,123 @@ def fast_perf_x_trading_days_ago(df: pd.DataFrame, days_ago: int, col_name: str)
 
     df = df.sort_values(['symbol', 'date']).reset_index(drop=True)
 
+    # groups by stock name, so there are different tables per stock
     close_x_days_ago = df.groupby("symbol")['close'].shift(days_ago)
-
+    # return = (current_price - price_x_days_ago)/price_x_days_ago
     df[col_name] = (df['close'] - close_x_days_ago)/close_x_days_ago
 
     return df
 
 
-def relative_field_x_days(df: pd.DataFrame, num_of_days: int,new_col_name: str, relevant_col_name: str) -> pd.DataFrame:
+
+def fast_perf_x_trading_days_ago_for_last_date(
+    new_day_df: pd.DataFrame,
+    historic_df: pd.DataFrame,
+    days_ago: int,
+    name_of_col: str,
+) -> pd.DataFrame: #TESTED
     """
+    Calculates the x-trading-days-ago return for the new rows only,
+    while keeping all historic rows.
+
+    :param new_day_df: DataFrame with the new daily rows.
+    :param historic_df: Existing full historical DataFrame.
+    :param days_ago: The days ago we want to calculate the "ret_n".
+    :param name_of_col: Name of the feature column to calculate.
+                        It works both if the col is in the df and if not.
+    :return: Full DataFrame = old rows + new rows, with name_of_col calculated for the new rows.
+    """
+    if new_day_df is None:
+        raise ValueError("new_day_df can't be None.")
+
+    elif new_day_df.empty:
+        raise ValueError("new_day_df is empty")
+
+    elif historic_df is None:
+        raise ValueError("historic_df can't be None.")
+
+    elif historic_df.empty:
+        raise ValueError("historic_df is empty")
+
+    elif (days_ago <= 0):
+        raise ValueError("The list_days_ago must have at least one day.")
+
+
+    required_cols = ["symbol", "date", "close"]
+
+    for col in required_cols:
+        if col not in new_day_df.columns:
+            raise ValueError(f"{col} must be in new_day_df")
+
+        elif col not in historic_df.columns:
+            raise ValueError(f"{col} must be in historic_df")
+
+    historic_df = historic_df.copy()
+    new_day_df = new_day_df.copy()
+
+    historic_df["date"] = pd.to_datetime(historic_df["date"]).dt.normalize()
+    new_day_df["date"] = pd.to_datetime(new_day_df["date"]).dt.normalize()
+
+    # Keep full historic df for the final output.
+    full_historic_df = historic_df.copy()
+
+    # Take only the last days_ago rows per symbol as context.
+    historic_context_df = (
+        historic_df
+        .sort_values(["symbol", "date"])
+        .groupby("symbol", group_keys=False)
+        .tail(days_ago)
+    )
+
+    # Mark rows so we know which rows are new after calculation.
+    historic_context_df["_is_new_row"] = False
+    new_day_df["_is_new_row"] = True
+
+    # Combine only the needed history + new rows.
+    calc_df = pd.concat([historic_context_df, new_day_df], ignore_index=True)
+
+    # Drop duplicates before calculation.
+    calc_df = (
+        calc_df
+        .drop_duplicates(subset=["symbol", "date"], keep="last")
+        .sort_values(["symbol", "date"])
+        .reset_index(drop=True)
+    )
+
+    # Calculate the feature.
+    calc_df = fast_perf_x_trading_days_ago(
+        df=calc_df,
+        days_ago=days_ago,
+        col_name=name_of_col
+    )
+
+    # Keep only the new rows with the calculated feature.
+    calculated_new_rows = calc_df[calc_df["_is_new_row"]].copy()
+    calculated_new_rows = calculated_new_rows.drop(columns=["_is_new_row"])
+
+    # The old full df did not have this helper column.
+    if "_is_new_row" in full_historic_df.columns:
+        full_historic_df = full_historic_df.drop(columns=["_is_new_row"])
+
+    # Add the calculated new rows to the full old df.
+    whole_df = pd.concat([full_historic_df, calculated_new_rows], ignore_index=True)
+
+    # Drop duplicates from the final full df.
+    whole_df = (
+        whole_df
+        .drop_duplicates(subset=["symbol", "date"], keep="last")
+        .sort_values(["symbol", "date"])
+        .reset_index(drop=True)
+    )
+
+    return whole_df
+
+
+
+
+
+def relative_field_x_days(df: pd.DataFrame, num_of_days: int,new_col_name: str, relevant_col_name: str) -> pd.DataFrame:
+    """ #TESTED
     Add relative_field_x_days per stock using the previous relative_volume_x_days trading.
     relative_vol_x = vol_t/ avg_vol_past_x_days
 
@@ -663,6 +621,17 @@ def relative_field_x_days(df: pd.DataFrame, num_of_days: int,new_col_name: str, 
     :param new_col_name: The name of the new column
     :return:
     """
+
+    if(df is None):
+        raise ValueError("Df can't be None!")
+    elif(num_of_days <= 0):
+        raise ValueError("num_of_days must be positive!")
+    elif(new_col_name is None):
+        raise ValueError("new_col_name can't be None!")
+    elif(relevant_col_name is None):
+        raise ValueError("relevant_col_name can't be None!")
+    elif(relevant_col_name not in df.columns):
+        raise ValueError("relevant_col_name must be in df")
 
     df = df.copy()
 
@@ -685,19 +654,118 @@ def relative_field_x_days(df: pd.DataFrame, num_of_days: int,new_col_name: str, 
     df[new_col_name] = df[relevant_col_name] / rolling_avg
     return df
 
+# todo: needs to be checked
+def relative_field_x_days_for_last_date(
+    new_day_df: pd.DataFrame,
+    historic_df: pd.DataFrame,
+    num_of_days: int,
+    new_col_name: str,
+    relevant_col_name: str
+) -> pd.DataFrame:
+    """
+    Calculates relative_field_x_days only for the new rows,
+    then adds the calculated new rows to the full historic df.
 
+    Example:
+    relative_volume_20_days = volume_t / average(volume of previous 20 trading rows)
 
-# adding the now cols and pickling again -> run once
-# five_thousand_days_data_df = add_days_ago_return_percentage_fast(five_thousand_days_data_df)
-# five_thousand_days_data_df = fast_perf_x_trading_days_ago(five_thousand_days_data_df, 30, 'perf_month')
-# five_thousand_days_data_df = relative_field_x_days(five_thousand_days_data_df, 20, "relative_volume_20_days", relevant_col_name="volume") -> checked, it is right
+    :param new_day_df: DataFrame with only the new daily rows.
+    :param historic_df: Existing full historical DataFrame.
+    :param num_of_days: Number of previous trading rows to use.
+    :param new_col_name: Name of the new calculated column.
+    :param relevant_col_name: Column used for the calculation, for example "volume".
+    :return: Full DataFrame = historic rows + calculated new rows, without duplicates.
+    """
 
+    if new_day_df is None:
+        raise ValueError("new_day_df can't be None!")
 
-# adding the ret_2, ret_3, ret_5, ret_10
-# five_thousand_days_data_df = add_days_ago_return_percentage_fast(five_thousand_days_data_df,2,'ret_2')
-# five_thousand_days_data_df = add_days_ago_return_percentage_fast(five_thousand_days_data_df,3,'ret_3')
-# five_thousand_days_data_df = add_days_ago_return_percentage_fast(five_thousand_days_data_df,5,'ret_5')
-# five_thousand_days_data_df = add_days_ago_return_percentage_fast(five_thousand_days_data_df,10,'ret_10')
+    if historic_df is None:
+        raise ValueError("historic_df can't be None!")
+
+    if new_day_df.empty:
+        raise ValueError("new_day_df is empty!")
+
+    if historic_df.empty:
+        raise ValueError("historic_df is empty!")
+
+    if num_of_days <= 0:
+        raise ValueError("num_of_days must be positive!")
+
+    if new_col_name is None:
+        raise ValueError("new_col_name can't be None!")
+
+    if relevant_col_name is None:
+        raise ValueError("relevant_col_name can't be None!")
+
+    required_cols = ["symbol", "date", relevant_col_name]
+
+    for col in required_cols:
+        if col not in new_day_df.columns:
+            raise ValueError(f"{col} must be in new_day_df")
+
+        if col not in historic_df.columns:
+            raise ValueError(f"{col} must be in historic_df")
+
+    historic_df = historic_df.copy()
+    new_day_df = new_day_df.copy()
+
+    historic_df["date"] = pd.to_datetime(historic_df["date"]).dt.normalize()
+    new_day_df["date"] = pd.to_datetime(new_day_df["date"]).dt.normalize()
+
+    # Keep the full old df for the final output.
+    full_historic_df = historic_df.copy()
+
+    # For this calculation we need the previous num_of_days rows per symbol.
+    historic_context_df = (
+        historic_df
+        .sort_values(["symbol", "date"])
+        .groupby("symbol", group_keys=False)
+        .tail(num_of_days)
+    )
+
+    # Mark which rows are new.
+    historic_context_df["_is_new_row"] = False
+    new_day_df["_is_new_row"] = True
+
+    # Combine only calculation context + new rows.
+    calc_df = pd.concat([historic_context_df, new_day_df], ignore_index=True)
+
+    # Remove duplicates before calculation.
+    calc_df = (
+        calc_df
+        .drop_duplicates(subset=["symbol", "date"], keep="last")
+        .sort_values(["symbol", "date"])
+        .reset_index(drop=True)
+    )
+
+    # Calculate the feature.
+    calc_df = relative_field_x_days(
+        df=calc_df,
+        num_of_days=num_of_days,
+        new_col_name=new_col_name,
+        relevant_col_name=relevant_col_name
+    )
+
+    # Keep only the new rows after calculation.
+    calculated_new_rows = calc_df[calc_df["_is_new_row"]].copy()
+    calculated_new_rows = calculated_new_rows.drop(columns=["_is_new_row"])
+
+    if "_is_new_row" in full_historic_df.columns:
+        full_historic_df = full_historic_df.drop(columns=["_is_new_row"])
+
+    # Add calculated new rows to full old df.
+    whole_df = pd.concat([full_historic_df, calculated_new_rows], ignore_index=True)
+
+    # Drop duplicates in the final full df.
+    whole_df = (
+        whole_df
+        .drop_duplicates(subset=["symbol", "date"], keep="last")
+        .sort_values(["symbol", "date"])
+        .reset_index(drop=True)
+    )
+
+    return whole_df
 
 
 
@@ -705,34 +773,10 @@ def relative_field_x_days(df: pd.DataFrame, num_of_days: int,new_col_name: str, 
 
 # the name of the current cols:
 # Index(['symbol', 'exchange', 'currency', 'date', 'open', 'high', 'low',
-#        'close', 'volume', 'pref_week', 'daily_return_percentage', 'perf_month',
+#        'close', 'volume', 'ret_7', 'ret_1', 'ret_30',
 #        'relative_volume_20_days'],
 #       dtype='object')
 
-
-# this is the path for experimenting
-experiment_pickle_file_path = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\five_thousand_days_data_experiment.pkl"
-experiment_train_and_validation_pickle_file_path = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\experiment_train_and_validation_data.pkl"
-experiment_test_pickle_file_path = r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\experiment_test_data.pkl"
-if(where_the_code_runs == 2):
-    experiment_pickle_file_path = r"/content/algo_trading_stocks/data/five_thousand_days_data_experiment.pkl"
-    experiment_train_and_validation_pickle_file_path = r"/content/algo_trading_stocks/data/experiment_train_and_validation_data.pkl"
-    experiment_test_pickle_file_path = r"/content/algo_trading_stocks/data/experiment_test_data.pkl"
-
-# one hot encoding but keeping the 'symbol' col
-# symbol_dummies = pd.get_dummies(five_thousand_days_data_df['symbol'], prefix='symbol')
-# five_thousand_days_data_experiment_df = pd.concat([five_thousand_days_data_df, symbol_dummies], axis=1)
-
-# printing the unique values of the 'exchange' and 'currency'
-# print(five_thousand_days_data_df['exchange'].unique()) -> checked and all the stocks are from ['NASDAQ' 'NYSE']
-# print(five_thousand_days_data_df['currency'].unique()) -> checked and all the stocks price is in USD
-
-# exchange_dummies = pd.get_dummies(five_thousand_days_data_experiment_df['exchange'], prefix='exchange')
-# five_thousand_days_data_experiment_df = pd.concat([five_thousand_days_data_experiment_df, exchange_dummies], axis=1)
-
-# we saved the last version on the pickle_file_path as well, and saved it on the main df name
-# pickling_func(five_thousand_days_data_experiment_df, experiment_pickle_file_path) # called it once, now it is saved
-# five_thousand_days_data_experiment_df = unpickle_data(experiment_pickle_file_path) # for now, with symbol one hot encoding
 
 
 
@@ -748,7 +792,7 @@ if(where_the_code_runs == 2):
 
 # checked -> calculates correctly
 def calculate_rolling_mean_for_x_days (df: pd.DataFrame, field_name: str, num_of_days: int, new_col_name: str, after_col_put_new_col: str = None) -> pd.DataFrame:
-    """
+    """ #TESTED
     This calculates the AVG values of the field_name of a stock for num_of_days
     and addes it as a col to the df.
     If a row doesn't have 20 days before it, it will put NA in the field.
@@ -761,6 +805,17 @@ def calculate_rolling_mean_for_x_days (df: pd.DataFrame, field_name: str, num_of
     :param after_col_put_new_col: The name of the col we want to put our new col after
     :return: The df with the new column and its values
     """
+
+    if(df is None):
+        raise ValueError("Df can't be None!")
+    if(df.empty):
+        raise ValueError("df can't be None!")
+    if(field_name is None):
+        raise ValueError("Field name can't be None!")
+    if(num_of_days <= 0):
+        raise ValueError("num_of_days must be positive!")
+    if(new_col_name is None):
+        raise ValueError("new_col_name can't be None!")
 
     # copying
     df = df.copy()
@@ -781,18 +836,127 @@ def calculate_rolling_mean_for_x_days (df: pd.DataFrame, field_name: str, num_of
 
     return df
 
-# called once and pickled
-# five_thousand_days_data_experiment_df = calculate_rolling_mean_for_x_days(five_thousand_days_data_experiment_df, 'close', 20, 'SMA_20', 'ret_10')
-# five_thousand_days_data_experiment_df = calculate_rolling_mean_for_x_days(five_thousand_days_data_experiment_df, 'close', 50, 'SMA_50', 'SMA_20')
-# print(five_thousand_days_data_experiment_df.iloc[40:60])
-# print(five_thousand_days_data_experiment_df.columns.get_loc('ret_10'))
+# todo: need to check this function
+def calculate_rolling_mean_for_x_days_for_last_date(
+    new_day_df: pd.DataFrame,
+    historic_df: pd.DataFrame,
+    field_name: str,
+    num_of_days: int,
+    new_col_name: str,
+    after_col_put_new_col: str | None = None
+) -> pd.DataFrame:
+    """
+    Calculates rolling mean only for the new rows,
+    then adds the calculated new rows to the full historic df.
 
-# pickling_func(five_thousand_days_data_experiment_df, experiment_pickle_file_path) # called it once, now it is saved
-# five_thousand_days_data_experiment_df = unpickle_data(experiment_pickle_file_path)
+    Example:
+    SMA_20 = average(close_t, close_t-1, ..., close_t-19)
+
+    :param new_day_df: DataFrame with only the new daily rows.
+    :param historic_df: Existing full historical DataFrame.
+    :param field_name: Column to calculate rolling mean on, for example "close".
+    :param num_of_days: Rolling window size.
+    :param new_col_name: Name of the new calculated column.
+    :param after_col_put_new_col: Optional column name to insert new_col_name after.
+    :return: Full DataFrame = historic rows + calculated new rows, without duplicates.
+    """
+
+    if new_day_df is None:
+        raise ValueError("new_day_df can't be None!")
+
+    if historic_df is None:
+        raise ValueError("historic_df can't be None!")
+
+    if new_day_df.empty:
+        raise ValueError("new_day_df is empty!")
+
+    if historic_df.empty:
+        raise ValueError("historic_df is empty!")
+
+    if field_name is None:
+        raise ValueError("field_name can't be None!")
+
+    if num_of_days <= 0:
+        raise ValueError("num_of_days must be positive!")
+
+    if new_col_name is None:
+        raise ValueError("new_col_name can't be None!")
+
+    required_cols = ["symbol", "date", field_name]
+
+    for col in required_cols:
+        if col not in new_day_df.columns:
+            raise ValueError(f"{col} must be in new_day_df")
+
+        if col not in historic_df.columns:
+            raise ValueError(f"{col} must be in historic_df")
+
+    historic_df = historic_df.copy()
+    new_day_df = new_day_df.copy()
+
+    historic_df["date"] = pd.to_datetime(historic_df["date"]).dt.normalize()
+    new_day_df["date"] = pd.to_datetime(new_day_df["date"]).dt.normalize()
+
+    # Keep the full old df for the final output.
+    full_historic_df = historic_df.copy()
+
+    # For rolling(window=num_of_days), the new row needs previous num_of_days - 1 rows.
+    # Taking num_of_days is also fine and safe.
+    historic_context_df = (
+        historic_df
+        .sort_values(["symbol", "date"])
+        .groupby("symbol", group_keys=False)
+        .tail(num_of_days)
+    )
+
+    # Mark which rows are new.
+    historic_context_df["_is_new_row"] = False
+    new_day_df["_is_new_row"] = True
+
+    # Combine only calculation context + new rows.
+    calc_df = pd.concat([historic_context_df, new_day_df], ignore_index=True)
+
+    # Remove duplicates before calculation.
+    calc_df = (
+        calc_df
+        .drop_duplicates(subset=["symbol", "date"], keep="last")
+        .sort_values(["symbol", "date"])
+        .reset_index(drop=True)
+    )
+
+    # Calculate the feature.
+    calc_df = calculate_rolling_mean_for_x_days(
+        df=calc_df,
+        field_name=field_name,
+        num_of_days=num_of_days,
+        new_col_name=new_col_name,
+        after_col_put_new_col=after_col_put_new_col
+    )
+
+    # Keep only the new rows after calculation.
+    calculated_new_rows = calc_df[calc_df["_is_new_row"]].copy()
+    calculated_new_rows = calculated_new_rows.drop(columns=["_is_new_row"])
+
+    if "_is_new_row" in full_historic_df.columns:
+        full_historic_df = full_historic_df.drop(columns=["_is_new_row"])
+
+    # Add calculated new rows to full old df.
+    whole_df = pd.concat([full_historic_df, calculated_new_rows], ignore_index=True)
+
+    # Drop duplicates in the final full df.
+    whole_df = (
+        whole_df
+        .drop_duplicates(subset=["symbol", "date"], keep="last")
+        .sort_values(["symbol", "date"])
+        .reset_index(drop=True)
+    )
+
+    return whole_df
+
 
 
 def add_sma_x_gap_percent(df: pd.DataFrame, sma_col_name: str, new_col_name: str, after_col_put_new_col: str = None) -> pd.DataFrame:
-    """
+    """ #TESTED
     Add the sma_x_gap col to the df
     The formoula is  ((close- SMA_x)/SMA_x) * 100
     :param df: The df
@@ -801,6 +965,13 @@ def add_sma_x_gap_percent(df: pd.DataFrame, sma_col_name: str, new_col_name: str
     :param after_col_put_new_col: The name of the col we want to put our new col after
     :return:
     """
+    if (df is None):
+        raise ValueError("Df can't be None!")
+    if (sma_col_name is None):
+        raise ValueError("sma_col_name can't be None!")
+    if (new_col_name is None):
+        raise ValueError("new_col_name can't be None!")
+
     df = df.copy()
 
     df[new_col_name] = ((df['close'] - df[sma_col_name])/df[sma_col_name]) * 100
@@ -812,35 +983,41 @@ def add_sma_x_gap_percent(df: pd.DataFrame, sma_col_name: str, new_col_name: str
 
     return df
 
-# five_thousand_days_data_experiment_df = add_sma_x_gap_percent(five_thousand_days_data_experiment_df, 'SMA_20', 'SMA_20_gap_percent', 'SMA_50')
-# five_thousand_days_data_experiment_df = add_sma_x_gap_percent(five_thousand_days_data_experiment_df, 'SMA_50', 'SMA_50_gap_percent', 'SMA_20_gap_percent')
-# pickling_func(five_thousand_days_data_experiment_df, experiment_pickle_file_path) # called it once, now it is saved
-# five_thousand_days_data_experiment_df = unpickle_data(experiment_pickle_file_path)
-#
-#
-# five_thousand_days_data_experiment_df = five_thousand_days_data_experiment_df.copy()
-# five_thousand_days_data_experiment_df["date"] = pd.to_datetime(five_thousand_days_data_experiment_df["date"])
-# five_thousand_days_data_experiment_df = (
-#     five_thousand_days_data_experiment_df
-#     .sort_values(["symbol", "date"])
-#     .reset_index(drop=True)
-# )
-#
-# # same-day return: keep as feature
-# five_thousand_days_data_experiment_df["daily_return_percentage"] = (
-#     five_thousand_days_data_experiment_df.groupby("symbol")["close"].pct_change(1)
-# )
-#
-# # true next-day target -> this is a ratio not percentage
-# five_thousand_days_data_experiment_df["next_day_return"] = (
-#     five_thousand_days_data_experiment_df.groupby("symbol")["close"].shift(-1)
-#     / five_thousand_days_data_experiment_df["close"] - 1
-# )
+
+# todo: finish
+def calculate_RSI_for_x_days(df: pd.DataFrame, num_of_days: int| None = 14):
+    """
+    Receives a df and the number of days we want to calculate the RSI for,
+    add the col and calculate the RSI.
+    RSI = 100-(100/ (1+RS))
+    RS = avg_gain_num_of_days/avg_loss_num_of_days
+    avg_gain -> from 1/num_of_days * sum(gain_i) (for i in num_of_days)
+                so we dvied by the num of days, but sum only over the days we gained.
+    avg_loss -> same idea
+    :param df: The df we work on.
+    :param num_of_days: The number of days -> RSI_num_of_days
+    :return: The df with the RSI_num_of_days col.
+    """
+    if (df is None):
+        raise ValueError("Df can't be None!")
+    elif(df.empty):
+        raise ValueError("Df can't be empty")
+
+    elif(num_of_days <= 0):
+        raise ValueError("num_of_days must be positive!")
+
+    name_of_col = f"RSI_{num_of_days}"
+
+
+
+
+
+
 
 # used once when needed -> pickle -> delete lines of call
 def move_col_position_in_df(df: pd.DataFrame, name_of_col_to_move: str,
                             index_of_new_position: int | None = None,
-                            name_of_col_to_move_after: str | None = None) -> pd.DataFrame:
+                            name_of_col_to_move_after: str | None = None) -> pd.DataFrame: #TESTED
     """
     Moved a col in df to a different position, based on name_of_col_to_move OR index.
     :param df: The df we change the location of a col in.
@@ -850,11 +1027,16 @@ def move_col_position_in_df(df: pd.DataFrame, name_of_col_to_move: str,
                                       our col to be right after it.
     :return: The change df.
     """
+    if(df is None):
+        raise ValueError("Df can't be None!")
+    elif(df.empty):
+        raise ValueError("Df can't be empty!")
+
     col_to_mov = df.pop(name_of_col_to_move)
 
     if ( ((name_of_col_to_move_after is not None) and (index_of_new_position is not None)) or
           ((name_of_col_to_move_after is None) and (index_of_new_position is None))):
-        raise ValueError('exctly one of name_of_col_to_move_after, index_of_new_position should not be None')
+        raise ValueError('exactly one of name_of_col_to_move_after, index_of_new_position should not be None')
 
     if (index_of_new_position is not None):
         df.insert(index_of_new_position, name_of_col_to_move, col_to_mov)
@@ -866,9 +1048,9 @@ def move_col_position_in_df(df: pd.DataFrame, name_of_col_to_move: str,
     return df
 
 
-def add_col_intraday_range(df: pd.DataFrame) -> pd.DataFrame:
+def add_col_intraday_range(df: pd.DataFrame) -> pd.DataFrame: #TESTED
     """
-    Adds a intraday_range col to the df.
+    Adds an intraday_range col to the df.
     if called again, overwrites old values.
     intraday_range =  ((high_t - low_t) / close_t(stock)) * 100
     high_t, low_t, close_t are data point of A STOCK on day t
@@ -877,6 +1059,11 @@ def add_col_intraday_range(df: pd.DataFrame) -> pd.DataFrame:
     :param df: The df.
     :return: The df with the intraday_range col.
     """
+    if(df is None):
+        raise ValueError("df can't be None!")
+    if(df.empty):
+        raise ValueError("df can't be empty!")
+
     df = df.copy()
 
     df['date'] = pd.to_datetime(df['date'])
@@ -890,31 +1077,25 @@ def add_col_intraday_range(df: pd.DataFrame) -> pd.DataFrame:
 
 
 
-
-
-
-################################### spliting the data to train_val_set and test_set###################################
-
-# five_thousand_days_data_experiment_df = unpickle_data(experiment_pickle_file_path)
-#
-#
-# print(five_thousand_days_data_experiment_df.head(3))
-#
-# # from the test i checked, it fucked up the XGBoost model, so drop it for now
-# five_thousand_days_data_experiment_df = five_thousand_days_data_experiment_df.drop(columns=['intraday_range_percent'])
-
-
-
 """
 data cleaning section
 """
 
 def keep_common_dates_only(df: pd.DataFrame,
                            symbol_col: str = 'symbol',
-                           date_col: str = 'date') -> pd.DataFrame:
+                           date_col: str = 'date') -> pd.DataFrame: # TESTED
     """
     Filters the DataFrame to keep only the dates that exist for every symbol.
+    :param df: The df we work on.
+    :param symbol_col: A column of the symbols of the ['APPL','INTEL']
+    :param date_col: A column of the dates of the records.
+    :return: A df with only the records of the dates that are common for all the stocks.
     """
+    if (df is None):
+        raise ValueError("df can't be None!")
+    if (df.empty):
+        raise ValueError("df can't be empty!")
+
     # 1. Get the list of unique symbols
     symbols = df[symbol_col].unique()
 
@@ -946,13 +1127,17 @@ def keep_common_dates_only(df: pd.DataFrame,
     return df_filtered.sort_values([date_col, symbol_col])
 
 def create_df_of_x_percent_of_the_rows(df: pd.DataFrame, percent_to_take: float | int, from_end_or_start: str = 'start') -> pd.DataFrame:
-    """
+    """ #TESTED
     Return a df of just the last/first percent_to_take%.
     :param df: The df.
     :param percent_to_take: the % of rows to take. ( percent_to_take in [0,100])
     :param from_end_or_start: a flag that says from where to start taking the rows.
     :return: A df of just the last/first percent_to_take%.
     """
+    if (df is None):
+        raise ValueError("df can't be None!")
+    if (df.empty):
+        raise ValueError("df can't be empty!")
     if not 0 <= percent_to_take <= 100:
         raise ValueError('percent must be between 0 to 100')
 
@@ -978,11 +1163,12 @@ def create_df_of_x_percent_of_the_rows(df: pd.DataFrame, percent_to_take: float 
 
 
 
+
 def split_df_to_train_val_test(df: pd.DataFrame,
                                percent_for_train: float | int,
                                percent_for_val: float | int,
                                percent_for_test: float | int | None = None,
-                               )-> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+                               )-> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]: #TESTED
     # todo: check for edge cases, if the split is not even, if it works and takes all the rows
     """
     Splits the df to 3 separate sets, The intersection of the separate is empty.
@@ -999,6 +1185,10 @@ def split_df_to_train_val_test(df: pd.DataFrame,
     # take the rest to be the test set.
     # all sets must exist, so no 0 or 100
     # todo: add check all symbols have the same date -> maybe as a different function
+    if (df is None):
+        raise ValueError("df can't be None!")
+    if (df.empty):
+        raise ValueError("df can't be empty!")
 
     # sort by date from smallest to largest
     df = df.sort_values(by='date',ascending=True)
@@ -1049,7 +1239,7 @@ def split_df_to_train_val_test(df: pd.DataFrame,
 # it is important we work with the same start and end date for all the stocks
 # end date -> same for all, the last date when I call to the API
 # start date -> can vary, so start from the min-max date (# 2020-09-30 00:00:00)
-def same_start_date_for_all_stocks(df: pd.DataFrame) -> pd.DataFrame:
+def same_start_date_for_all_stocks(df: pd.DataFrame) -> pd.DataFrame: # TESTED
     """
     Returns the df with the same starting date
     for all stocks.
@@ -1057,6 +1247,11 @@ def same_start_date_for_all_stocks(df: pd.DataFrame) -> pd.DataFrame:
     :return: The df with the same starting date
              for all stocks.
     """
+    if (df is None):
+        raise ValueError("df can't be None!")
+    if (df.empty):
+        raise ValueError("df can't be empty!")
+
     df = df.copy()
     df['date'] = pd.to_datetime(df['date'])
     min_date_all_symbols_have = df.groupby('symbol')['date'].min().max()
@@ -1066,57 +1261,6 @@ def same_start_date_for_all_stocks(df: pd.DataFrame) -> pd.DataFrame:
 
 
 
-
-# here we made sure all the stocks have the same starting date
-# five_thousand_days_data_experiment_df = same_start_date_for_all_stocks(five_thousand_days_data_experiment_df)
-
-# we make sure all symbols have the same dates
-
-# five_thousand_days_data_experiment_df = keep_common_dates_only(five_thousand_days_data_experiment_df)
-# pickling_func(five_thousand_days_data_experiment_df, experiment_pickle_file_path) # called it once, now it is saved
-five_thousand_days_data_experiment_df = unpickle_data(experiment_pickle_file_path)
-
-# we will take 85% of the data to be in the train_validation set,
-# and the other 15% we will take for the test set -> so we won't train our model on the test set.
-# train_set, validation_set, data_experiment_test_df = split_df_to_train_val_test(df = five_thousand_days_data_experiment_df,
-#                                                                  percent_for_train = 70,
-#                                                                  percent_for_val = 15,
-#                                                                  percent_for_test = 15,
-#                                                                  from_end_or_start = 'start')
-#
-#
-# data_experiment_train_and_validation_df = pd.concat([train_set, validation_set], ignore_index=True)
-#
-# # it works
-# print(f'data_experiment_train_and_validation_df: {len(data_experiment_train_and_validation_df)}')
-# print(f'data_experiment_test_df: {len(data_experiment_test_df)}')
-# print(f'five_thousand_days_data_experiment_df: {len(five_thousand_days_data_experiment_df)}\n')
-
-
-# data_experiment_train_and_validation_df = keep_common_dates_only(data_experiment_train_and_validation_df)
-# pickling_func(data_experiment_train_and_validation_df, experiment_train_and_validation_pickle_file_path) # called it once, now it is saved
-data_experiment_train_and_validation_df = unpickle_data(experiment_train_and_validation_pickle_file_path)
-
-print(f'list of the columns of data_experiment_train_and_validation_df: {data_experiment_train_and_validation_df.columns.tolist()}')
-
-# data_experiment_test_df = keep_common_dates_only(data_experiment_test_df)
-# pickling_func(data_experiment_test_df, experiment_test_pickle_file_path) # called it once, now it is saved
-data_experiment_test_df = unpickle_data(experiment_test_pickle_file_path)
-
-###################################################checked -> works###################################################
-# print(data_experiment_test_df.columns.tolist())
-# # this prints the amount of rows each stock has
-# print(data_experiment_test_df.groupby('symbol').size().sort_values())
-# print(data_experiment_test_df['symbol'].nunique())
-# print(data_experiment_train_and_validation_df['symbol'].nunique())
-# print(data_experiment_train_and_validation_df.groupby('symbol').size().sort_values())
-###################################################checked -> works###################################################
-
-# print the min max (biggest min - the min date that all symbols have)
-min_date_all_symbols_have = data_experiment_train_and_validation_df.groupby('symbol')['date'].min().max() # 2020-09-30 00:00:00
-max_date = data_experiment_train_and_validation_df.groupby('symbol')['date'].max().max() # 2025-05-20 00:00:00
-print(f"min date that all symbols have: {min_date_all_symbols_have}")
-print(f"max date in the train_val_set: {max_date}\n")
 
 
 # todo: find best hyper parameters
@@ -1128,7 +1272,7 @@ def data_split_to_train_and_validation(
     df: pd.DataFrame,
     start_date_train_window: date,
     validation_date: date,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]: #TESTED
     """
     Splits the data two a train and validation set, based on the date the function is getting.
     Train set: rows from start_date_train_window up to but not including validation_date.
@@ -1139,6 +1283,10 @@ def data_split_to_train_and_validation(
     :return: train_set, validation_set.
     """
 
+    if (df is None):
+        raise ValueError("df can't be None!")
+    if (df.empty):
+        raise ValueError("df can't be empty!")
 
     df = df.copy()
     df["date"] = pd.to_datetime(df["date"])
@@ -1163,6 +1311,87 @@ def data_split_to_train_and_validation(
 
     return train_set, validation_set
 
+def one_hot_encoding(df: pd.DataFrame, field_to_one_hot_encode: str, prefix: str | None = None) -> pd.DataFrame: #TESTED
+    """
+    This function receives a pandas dataframe and returns a one-hot-encoded dataframe
+    on the col we wrote.
+    :param df: The df to one hot-encode.
+    :param field_to_one_hot_encode: The field we wrote to one-hot-encode.
+    :param prefix: The string we want to add to the name of the column we wrote in the new cols.
+    :return: The df after the one-hot-encode.
+    """
+
+    if (df is None):
+        raise ValueError("df can't be None!")
+    if (df.empty):
+        raise ValueError("df can't be empty!")
+
+    if(field_to_one_hot_encode not in df.columns):
+        raise ValueError('field_to_one_hot_encode must be in df.columns')
+
+    prefix_to_add = prefix if prefix is not None else field_to_one_hot_encode
+
+    df = df.copy()
+
+    # does the one hot encoding on the col
+    dummies = pd.get_dummies(df[field_to_one_hot_encode], prefix=prefix_to_add)
+    df = pd.concat([df, dummies ], axis=1)
+
+    return df
+
+#
+def Populate_df1_in_df2_structure(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame: #TESTED
+    """
+    Converts df1's column structure (columns and column order) to match df2.
+    Missing columns are filled with NaN; extra columns are dropped.
+    :param df1: The df we want to be like df2.
+    :param df2: The df we usq as the wanted structure.
+    :return: Df1 after changing it to be like the df2 structure.
+    """
+    if (df1 is None):
+        raise ValueError("df1 can't be None!")
+    if (df1.empty):
+        raise ValueError("df1 can't be empty!")
+
+    if (df2 is None):
+        raise ValueError("df2 can't be None!")
+    if (df2.empty):
+        raise ValueError("df2 can't be empty!")
+
+    # reindex aligns df1's columns to match df2's columns exactly
+    return df1.reindex(columns=df2.columns)
+
+
+# todo: add so it will check the date it adds doesn't exists
+def add_row_of_new_df_to_og_df(new_df: pd.DataFrame, og_df: pd.DataFrame) -> pd.DataFrame: #TESTED
+    """
+    This adds the rows of the new_df to the end of the og_df.
+    checks if the df are the same in structure.
+    :param new_df: The df we want to add at the end of the og_df.
+    :param og_df: The df we want to add to.
+    :return: The new df, with the rows of the og_df and the rows of the new_df at the end.
+    """
+    if (new_df is None):
+        raise ValueError("df can't be None!")
+    if (new_df.empty):
+        raise ValueError("df can't be empty!")
+
+    if (og_df is None):
+        raise ValueError("df can't be None!")
+    if (og_df.empty):
+        raise ValueError("df can't be empty!")
+
+    # 1. Check if they have the exact same columns in the exact same order
+    if new_df.columns.tolist() != og_df.columns.tolist():
+        raise ValueError("The dataframes must have the exact same columns in the same order.")
+
+    # 2. Use axis=0 to stack them vertically (rows)
+    # Note: pd.concat automatically returns a new copy, so og_df.copy() isn't strictly necessary here.
+    combined_df = pd.concat([og_df, new_df], axis=0, ignore_index=True)
+
+    return combined_df
+
+
 #####################################################scale the data#####################################################
 """
 I will min-max scale the X-FEATURES.
@@ -1179,28 +1408,294 @@ doesn't affect the evaluation_and_simulation logic
 
 
 
+################################################## The main function ##################################################
+# todo: finish writing the main function. go over chat comments.
+
+def main() -> None:
+    """
+    This code does all thr data prep and cleaning.
+    After we run it once, if there is no new data, there is no need to run it again.
+    It preps and cleans the data and pickles the results.
+    There is no need to pickle after each change, so we comment the pickles.
+    I checked before and the changes were fine, so there is no need for "check points".
+    NOTICE -> there is a field called "next_day_return", THE MODEL DOESN'T TRAIN ON IT!!!
+              it is the target col!!!!
+    :return:
+    """
+
+    # selecting where the code runs -> locally/ Google-colab
+    where_the_code_runs = get_where_the_code_runs()
+
+    # loading the five_thousand_days_data_df, the df we work on.
+    five_thousand_days_data_df = load_five_thousand_days_data_df(where_the_code_runs = where_the_code_runs)
+
+    # delete
+    # todo: run this part just once to change the names of the cols and save it
+    five_thousand_days_data_df.rename(columns={"pref_week":"ret_7",
+                                               "daily_return_percentage": "ret_1",
+                                               "perf_month": "ret_30"})
+    # pickle the data
+    pickling_func(data = five_thousand_days_data_df, file_path = FIVE_THOUSAND_DAYS_DATA)
+    # delete
+
+    # calling the function and adding the ret_7 data
+    # call once to calculate and add the ret_7.
+    # when new rows add, need to run this again.
+
+    # def fast_perf_x_trading_days_ago(df: pd.DataFrame, days_ago: int, col_name: str) -> pd.DataFrame:
+    five_thousand_days_data_df = fast_perf_x_trading_days_ago(
+        df = five_thousand_days_data_df,
+        days_ago = 7,
+        col_name = 'ret_7'
+    )
+
+    print(five_thousand_days_data_df.head(8))
+
+    # calling the function and adding the pref_month data
+    # same here
+    five_thousand_days_data_df = fast_perf_x_trading_days_ago(
+        df = five_thousand_days_data_df,
+        days_ago = 30,
+        col_name = 'ret_30'
+    )
+
+
+######################## adding more fields #################################333
+################################ works -> add the ret_7 col and pickeld the data ###################################
+
+
+############ adding more feilds i can compute here ################
+
+
+# The function is right but really slow, each time filters the df,
+# will write the same function but much faster
+# def ret_1_calculator(symbol: str, date: pd.Timestamp):
+#     """
+#     Calculates the daily return percentage of a stock -> (p(t)-p(t-1))/p(t-1)
+#     :param symbol: The symbol of the stock
+#     :param date: The date
+#     :return: (close_p(date)-close_p(date-1))/close_p(date-1)
+#     """
+#
+#     # finding the close_p of a stock in a date
+#     relevant_date = pd.Timestamp(date).normalize()
+#     relevant_row = five_thousand_days_data_df[
+#         (five_thousand_days_data_df["symbol"] == symbol) &
+#         (five_thousand_days_data_df["date"].dt.normalize() == relevant_date)
+#     ]
+#
+#     if relevant_row.empty:
+#         return np.nan
+#
+#     closing_price_relevant_date = relevant_row['close'].iloc[0]
+#
+#     # doing the same for previous trading date
+#
+#     days_ago = 1
+#     # the previous trading day is not necessarily one day before
+#     closing_price_one_trading_day_before = None
+#     while closing_price_one_trading_day_before is None and days_ago <= 20:
+#         date_one_trading_day_before = (relevant_date - pd.Timedelta(days=days_ago)).normalize()
+#         relevant_row_one_trading_day_before = five_thousand_days_data_df[
+#             (five_thousand_days_data_df["symbol"] == symbol) &
+#             (five_thousand_days_data_df["date"].dt.normalize() == date_one_trading_day_before)
+#         ]
+#
+#         if not relevant_row_one_trading_day_before.empty:
+#             closing_price_one_trading_day_before = relevant_row_one_trading_day_before['close'].iloc[0]
+#
+#         days_ago += 1
+#
+#     if closing_price_one_trading_day_before is None:
+#         return np.nan
+#
+#     ret_1 = (closing_price_relevant_date - closing_price_one_trading_day_before)/closing_price_one_trading_day_before
+#
+#     return ret_1
+
+
+#     adding the now cols and pickling again -> run once
+    five_thousand_days_data_df = relative_field_x_days(df = five_thousand_days_data_df,num_of_days = 20,
+                                                       new_col_name = "relative_volume_20_days",
+                                                       relevant_col_name="volume") # -> checked, it is right
+
+    """
+    (df: pd.DataFrame, num_of_days: int,new_col_name: str, relevant_col_name: str)
+    """
+#
+#   adding the ret_2, ret_3, ret_5, ret_10
+    five_thousand_days_data_df = add_days_ago_return_percentage_fast(df = five_thousand_days_data_df,
+                                                                     days_ago = 2,
+                                                                     new_col_name = 'ret_2')
+    five_thousand_days_data_df = add_days_ago_return_percentage_fast(five_thousand_days_data_df,
+                                                                     days_ago =3,
+                                                                     new_col_name = 'ret_3')
+    five_thousand_days_data_df = add_days_ago_return_percentage_fast(five_thousand_days_data_df,
+                                                                     days_ago =5,
+                                                                     new_col_name = 'ret_5')
+    five_thousand_days_data_df = add_days_ago_return_percentage_fast(five_thousand_days_data_df,
+                                                                     days_ago =10,
+                                                                     new_col_name = 'ret_10')
+#
+#
+#     the name of the current cols:
+#     Index(['symbol', 'exchange', 'currency', 'date', 'open', 'high', 'low',
+#            'close', 'volume', 'ret_7', 'ret_1', 'ret_30',
+#            'relative_volume_20_days'],
+#           dtype='object')
+#
+#
+#     one hot encoding but keeping the 'symbol' col
+    five_thousand_days_data_experiment_df = one_hot_encoding(df = five_thousand_days_data_df,
+                                                             field_to_one_hot_encode = 'symbol',
+                                                             prefix = 'symbol')
+#
+#     printing the unique values of the 'exchange' and 'currency'
+#     print(five_thousand_days_data_df['exchange'].unique()) -> checked and all the stocks are from ['NASDAQ' 'NYSE']
+#     print(five_thousand_days_data_df['currency'].unique()) -> checked and all the stocks price is in USD
+#
+    five_thousand_days_data_experiment_df = one_hot_encoding(df = five_thousand_days_data_experiment_df,
+                                                             field_to_one_hot_encode = 'exchange',
+                                                             prefix = 'exchange')
+#
+#     we saved the last version on the pickle_file_path as well, and saved it on the main df name
+    experiment_pickle_file_path = FIVE_THOUSAND_DAYS_DATA_EXPERIMENT
+
+
+#   called once and pickled
+    five_thousand_days_data_experiment_df = calculate_rolling_mean_for_x_days(df = five_thousand_days_data_experiment_df,
+                                                                              field_name = 'close',num_of_days = 20,
+                                                                              new_col_name = 'SMA_20',
+                                                                              after_col_put_new_col = 'ret_10')
+
+    five_thousand_days_data_experiment_df = calculate_rolling_mean_for_x_days(df = five_thousand_days_data_experiment_df,
+                                                                              field_name = 'close',
+                                                                              num_of_days = 50,
+                                                                              new_col_name = 'SMA_50',
+                                                                              after_col_put_new_col = 'SMA_20')
+    print(five_thousand_days_data_experiment_df.iloc[40:60])
+    print(five_thousand_days_data_experiment_df.columns.get_loc('ret_10'))
+
+
+    five_thousand_days_data_experiment_df = add_sma_x_gap_percent(five_thousand_days_data_experiment_df, 'SMA_20', 'SMA_20_gap_percent', 'SMA_50')
+    five_thousand_days_data_experiment_df = add_sma_x_gap_percent(five_thousand_days_data_experiment_df, 'SMA_50', 'SMA_50_gap_percent', 'SMA_20_gap_percent')
+    # pickling_func(five_thousand_days_data_experiment_df, experiment_pickle_file_path) # called it once, now it is saved
 
 
 
-# delete
-print('data_experiment_test_df: ')
-print(data_experiment_test_df.columns.tolist())
+    five_thousand_days_data_experiment_df = five_thousand_days_data_experiment_df.copy()
+    five_thousand_days_data_experiment_df["date"] = pd.to_datetime(five_thousand_days_data_experiment_df["date"])
+    five_thousand_days_data_experiment_df = (
+        five_thousand_days_data_experiment_df
+        .sort_values(["symbol", "date"])
+        .reset_index(drop=True)
+    )
 
-print('\ndata_experiment_train_and_validation_df: ')
-print(data_experiment_train_and_validation_df.columns.tolist())
-# delete
+    # # same-day return: keep as feature
+    five_thousand_days_data_experiment_df["ret_1"] = (
+        five_thousand_days_data_experiment_df.groupby("symbol")["close"].pct_change(1)
+    )
+
+    """
+    NOTICE -> next_day_return IS THE TARGET COL, THE MODELS DO NOT TRAIN ON IT.
+    """
+    # # true next-day target -> this is a ratio not percentage
+    # This is -> (tomorrow's Close/ Today's Close) - 1
+    # the model doesn't train on this !!!!!! this is the y col.
+    five_thousand_days_data_experiment_df["next_day_return"] = (
+        five_thousand_days_data_experiment_df.groupby("symbol")["close"].shift(-1)
+        / five_thousand_days_data_experiment_df["close"] - 1
+    )
+
+    ################################### spliting the data to train_val_set and test_set###################################
+    #
+    #
+    # print(five_thousand_days_data_experiment_df.head(3))
+    #
+    # # from the test i checked, it fucked up the XGBoost model, so drop it for now
+    # also we protect it from the error of the col not existing
+    # five_thousand_days_data_experiment_df = five_thousand_days_data_experiment_df.drop(
+    #     columns=['intraday_range_percent'],
+    #     errors='ignore'
+    # )
+
+
+    # here we made sure all the stocks have the same starting date
+    five_thousand_days_data_experiment_df = same_start_date_for_all_stocks(five_thousand_days_data_experiment_df)
+
+    # we make sure all symbols have the same dates
+    five_thousand_days_data_experiment_df = keep_common_dates_only(five_thousand_days_data_experiment_df)
+    pickling_func(five_thousand_days_data_experiment_df, experiment_pickle_file_path) # called it once, now it is saved
+
+
+    five_thousand_days_data_experiment_df = load_five_thousand_days_data_experiment_df(
+        where_the_code_runs = where_the_code_runs
+    )
+
+    # we will take 85% of the data to be in the train_validation set,
+    # and the other 15% we will take for the test set -> so we won't train our model on the test set.
+    train_set, validation_set, data_experiment_test_df = split_df_to_train_val_test(df = five_thousand_days_data_experiment_df,
+                                                                     percent_for_train = 70,
+                                                                     percent_for_val = 15,
+                                                                     percent_for_test = 15
+                                                                    )
+
+
+    data_experiment_train_and_validation_df = pd.concat([train_set, validation_set], ignore_index=True)
+    #
+    # # it works
+    # print(f'data_experiment_train_and_validation_df: {len(data_experiment_train_and_validation_df)}')
+    # print(f'data_experiment_test_df: {len(data_experiment_test_df)}')
+    # print(f'five_thousand_days_data_experiment_df: {len(five_thousand_days_data_experiment_df)}\n')
+
+    experiment_train_and_validation_pickle_file_path = EXPERIMENT_TRAIN_AND_VALIDATION_DATA
+
+    data_experiment_train_and_validation_df = keep_common_dates_only(data_experiment_train_and_validation_df)
+    pickling_func(data_experiment_train_and_validation_df, experiment_train_and_validation_pickle_file_path) # called it once, now it is saved
+    data_experiment_train_and_validation_df = load_data_experiment_train_and_validation_df(where_the_code_runs = where_the_code_runs)
+
+    print(
+        f'list of the columns of data_experiment_train_and_validation_df: {data_experiment_train_and_validation_df.columns.tolist()}'
+    )
+
+    experiment_test_pickle_file_path = EXPERIMENT_TEST_DATA
+
+    data_experiment_test_df = keep_common_dates_only(data_experiment_test_df)
+    pickling_func(data_experiment_test_df, experiment_test_pickle_file_path) # called it once, now it is saved
+
+
+    ###################################################checked -> works###################################################
+    # print(data_experiment_test_df.columns.tolist())
+    # # this prints the amount of rows each stock has
+    # print(data_experiment_test_df.groupby('symbol').size().sort_values())
+    # print(data_experiment_test_df['symbol'].nunique())
+    # print(data_experiment_train_and_validation_df['symbol'].nunique())
+    # print(data_experiment_train_and_validation_df.groupby('symbol').size().sort_values())
+    ###################################################checked -> works###################################################
+
+    # print the min max (biggest min - the min date that all symbols have)
+    min_date_all_symbols_have = data_experiment_train_and_validation_df.groupby('symbol')[
+        'date'].min().max()  # 2020-09-30 00:00:00
+    max_date = data_experiment_train_and_validation_df.groupby('symbol')['date'].max().max()  # 2025-05-20 00:00:00
+    print(f"min date that all symbols have: {min_date_all_symbols_have}")
+    print(f"max date in the train_val_set: {max_date}\n")
+
+    # delete
+    print('data_experiment_test_df: ')
+    print(data_experiment_test_df.columns.tolist())
+
+    print('\ndata_experiment_train_and_validation_df: ')
+    print(data_experiment_train_and_validation_df.columns.tolist())
 
 
 
 
+    # delete
 
 
-
-
-
-
-
-
+# running the code
+if __name__ == "__main__":
+    main()
 
 
 

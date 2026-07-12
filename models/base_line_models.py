@@ -7,7 +7,6 @@ import pandas as pd
 import numpy as np
 from models.model_base import Model
 
-
 class DumbModel(Model):
     def fit(self, x_train: pd.DataFrame, y_train: pd.Series) -> None:
         """ no fit in this model"""
@@ -23,7 +22,7 @@ class DumbModel(Model):
 
 class PreviousDayReturnModel(Model):
 
-    def __init__(self, relevant_col_name: str = "daily_return_percentage") -> None:
+    def __init__(self, relevant_col_name: str = "ret_1") -> None:
         self.relevant_col_name = relevant_col_name
 
     def fit(self, x_train: pd.DataFrame, y_train: pd.Series) -> None:
@@ -71,7 +70,7 @@ class PreviousDayReturnModel(Model):
 
 
 class RollingAvgModel(Model):
-    def __init__(self, num_of_days: int, relevant_col_name: str = "daily_return_percentage") -> None:
+    def __init__(self, num_of_days: int, relevant_col_name: str = "ret_1") -> None:
         """
         The builder.
         :param num_of_days: The number of days we use to calculate the AVG.
@@ -125,7 +124,7 @@ class RollingAvgModel(Model):
             .set_index("symbol")["rolling_avg_pred"]
         )
 
-        y_pred = validation_set["symbol"].map(last_rolling_avg).to_numpy()
+        y_pred = validation_set["symbol"].map(last_rolling_avg).fillna(0).to_numpy()
 
         return y_pred
 

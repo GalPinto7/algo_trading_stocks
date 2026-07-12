@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<!-- This html is not a page -->
+<!-- the main template for our website.
+All other templates (web pages) will inherit from it, following its design and
+overall layout.
+Basically, whenever we want a feature or a piece of design to appear on every
+page of our website, we will write it inside base.html  -->
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}Home{% endblock %}</title>
+</head>
+<body>
+    <p>This text will show up on any page inheriting from base.html</p>
+    {% block content %}{% endblock %}
+</body>
+</html>

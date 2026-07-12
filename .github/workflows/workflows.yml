@@ -1,0 +1,37 @@
+# Name shown in GitHub.
+name: Tests
+
+# Run when you push code or open/update a pull request.
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    # Use a clean Linux machine.
+    runs-on: ubuntu-latest
+
+    # Sets fake environment variables for tests -> not real vars
+    env:
+      TWELVE_DATA_API_KEY: dummy-key-for-tests
+      SECRET_KEY: dummy-secret-for-tests
+
+    # Downloads your repository into the runner.
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # installs python and dependencies
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # runs the tests
+      - name: Run tests
+        run: pytest -q
