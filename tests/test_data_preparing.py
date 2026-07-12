@@ -7,6 +7,7 @@ import numpy as np
 from data_preparing import * # todo: change later
 import data_preparing as dp
 from daily_stocks_prices_getter import calculate_values_of_rest_of_cols
+from paths import DATA_DIR, TECH_UNIVERSE_CSV
 
 
 """
@@ -85,11 +86,10 @@ pseudo_df = pd.DataFrame(rows)
 
 
 
-def test_Access_the_file_path():
-    assert Access_the_file_path(1,r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\tech_universe.csv",
-                                r"/content/algo_trading_stocks/data/tech_universe.csv") == r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\tech_universe.csv"
-    assert Access_the_file_path(2, r"C:\Users\galpi\Desktop\stocks algo trading - 14.03.2026\data\tech_universe.csv",
-                                r"/content/algo_trading_stocks/data/tech_universe.csv") == r"/content/algo_trading_stocks/data/tech_universe.csv"
+def test_project_paths_are_relative_to_project_data_folder():
+    assert DATA_DIR.name == "data"
+    assert TECH_UNIVERSE_CSV.name == "tech_universe.csv"
+    assert TECH_UNIVERSE_CSV.parent == DATA_DIR
 
 
 # 1. Define a pytest fixture to create a predictable mock DataFrame

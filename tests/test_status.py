@@ -12,21 +12,24 @@ All the responses are defined in the view.py file.
 # todo: add more tests.
 
 import pytest
-import requests
-
-SERVER_HOST = "localhost"
-PORT = 5000
+from website import create_app
 
 
-def base_url():
-    """
-    This returns the base of the url of the website
-    We will use it to get the start of the website url and then write the rest.
-    :return: Base of the url of the website
-    """
-    return f"http://{SERVER_HOST}:{PORT}"
+"""
+for CI, I can't use something like: http://localhost:5000/status
+That only works if you manually start the Flask server before running tests.
+That is bad for CI because GitHub Actions will not automatically have your server running.
+So the test should use Flask’s built-in test client.
+A test client is a fake browser/request tool built into Flask.
+"""
 
-def test_status_page():
+@pytest.fixture()
+def client():
+    app = create_app()
+    app.config.update(TESTING=True)
+    return app.test_client()
+
+def test_status_page(client):
     """
     Checks if the status page is working correctly.
     We check if: status code is 200 -> good.
@@ -35,12 +38,14 @@ def test_status_page():
     :return:
     """
     # return {"version": "1.0", "status": "OK"}, 200
-    response = requests.get(f"{base_url()}/status", timeout=10)
+    response = client.get("/status")
     # check if the status_code - 200
     assert response.status_code == 200
-    data = response.json()
+    data = response.get_json()
     assert data["version"] == "1.0"
     assert data["status"] == "OK"
+
+
 
 
 
